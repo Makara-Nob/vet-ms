@@ -8,8 +8,6 @@ public class BreedForm : Form
     private DataGridView dgv = null!;
     private TextBox txtSearch = null!;
     private Label lblStatus = null!;
-    private Button btnEdit = null!;
-    private Button btnDelete = null!;
     private int _currentPage = 1;
     private int _pageSize = 10;
     private List<Breed> _filtered = [];
@@ -17,6 +15,7 @@ public class BreedForm : Form
     private Button btnPrev = null!;
     private Button btnNext = null!;
     private Label lblPage = null!;
+    private Label lblNoData = null!;
 
     private List<Breed> _data = [];
 
@@ -42,9 +41,8 @@ public class BreedForm : Form
 
         var gridContainer = new Panel
         {
-            Width = 1000,          // control width
             Height = 420,          // ✅ FIXED HEIGHT (important)
-            Anchor = AnchorStyles.Top, // stay near top
+            Dock = DockStyle.Top,  // full width, stay at top
         };
 
         var paginationBar = BuildPaginationBar();
@@ -52,24 +50,19 @@ public class BreedForm : Form
 
         dgv.Dock = DockStyle.Fill;
 
-        contentPanel.Controls.Add(dgv);
-        contentPanel.Controls.Add(paginationBar);
+        lblNoData = UIHelper.CreateEmptyDataLabel("No breeds or records yet.");
 
-
-        // center horizontally
-        contentPanel.Resize += (_, _) =>
-        {
-            gridContainer.Left = (contentPanel.Width - gridContainer.Width) / 2;
-            gridContainer.Top = 10;
-        };
-
+        gridContainer.Controls.Add(lblNoData);
+        gridContainer.Controls.Add(dgv);
+        gridContainer.Controls.Add(paginationBar);
+        lblNoData.BringToFront();
+        dgv.BringToFront(); // Ensure Fill docked control fills the remaining space
 
         // ✅ Add in correct order (top → bottom layout)
         contentPanel.Controls.Add(gridContainer);
         Controls.Add(contentPanel);
         Controls.Add(BuildStatusBar());   // stays at very bottom
         Controls.Add(BuildSearchBar());
-        Controls.Add(BuildToolbar());
         Controls.Add(UIHelper.CreateHeader(
             "Breeds",
             "Manage animal breeds linked to each species"
@@ -94,17 +87,20 @@ public class BreedForm : Form
             BackColor = Color.FromArgb(230, 232, 235)
         };
 
-        btnPrev = MakeToolButton("◀ Prev", Color.FromArgb(108, 117, 125), 80);
-        btnNext = MakeToolButton("Next ▶", Color.FromArgb(108, 117, 125), 80);
+        btnPrev = MakeToolButton("Prev", Color.FromArgb(108, 117, 125), 80);
+        btnNext = MakeToolButton("Next", Color.FromArgb(108, 117, 125), 80);
 
         lblPage = new Label
         {
-            AutoSize = true,
-            Font = new Font("Segoe UI", 8.5f),
+            AutoSize = false,
+            Width = 100,
+            Height = 30,
+            Font = new Font("Segoe UI", 9f),
             TextAlign = ContentAlignment.MiddleCenter
         };
 
-        btnPrev.Top = btnNext.Top = 4;
+        btnPrev.Top = btnNext.Top = 3;
+        btnPrev.Height = btnNext.Height = 30;
 
         btnPrev.Click += (_, _) =>
         {
@@ -126,9 +122,9 @@ public class BreedForm : Form
 
         bar.Resize += (_, _) =>
         {
-            btnNext.Left = bar.Width - btnNext.Width - 12;
-            lblPage.Left = btnNext.Left - 90;
-            lblPage.Top = 12;
+            btnNext.Left = bar.Width - btnNext.Width - 16;
+            lblPage.Left = btnNext.Left - lblPage.Width - 8;
+            lblPage.Top = btnNext.Top;
             btnPrev.Left = lblPage.Left - btnPrev.Width - 8;
         };
 
@@ -136,60 +132,6 @@ public class BreedForm : Form
         bar.Controls.Add(btnPrev);
         bar.Controls.Add(lblPage);
         bar.Controls.Add(btnNext);
-
-        return bar;
-    }
-
-    private Panel BuildToolbar()
-    {
-        var bar = new Panel
-        {
-            Dock = DockStyle.Top,
-            Height = 50,
-            BackColor = Color.White
-        };
-
-        var topLine = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = Color.FromArgb(230, 232, 235) };
-        var botLine = new Panel { Dock = DockStyle.Bottom, Height = 1, BackColor = Color.FromArgb(230, 232, 235) };
-
-        var btnAdd = MakeToolButton("＋ Add", UIHelper.Success, 100);
-        btnEdit = MakeToolButton("✎ Edit", UIHelper.Accent, 120);
-        btnDelete = MakeToolButton("✕ Delete", UIHelper.Danger, 120);
-        var btnRefresh = MakeToolButton("↺ Refresh", Color.FromArgb(90, 100, 115), 120);
-
-        btnEdit.Enabled = false;
-        btnDelete.Enabled = false;
-
-        int x = 12;
-        foreach (var b in new[] { btnAdd, btnEdit, btnDelete })
-        {
-            b.Left = x;
-            b.Top = 9;
-            bar.Controls.Add(b);
-            x += b.Width + 6;
-        }
-
-        var div = new Panel
-        {
-            Width = 1,
-            Height = 28,
-            Left = x + 4,
-            Top = 11,
-            BackColor = Color.FromArgb(220, 225, 230)
-        };
-        bar.Controls.Add(div);
-
-        btnRefresh.Left = x + 12;
-        btnRefresh.Top = 9;
-        bar.Controls.Add(btnRefresh);
-
-        bar.Controls.Add(topLine);
-        bar.Controls.Add(botLine);
-
-        btnAdd.Click += BtnAdd_Click;
-        btnEdit.Click += BtnEdit_Click;
-        btnDelete.Click += BtnDelete_Click;
-        btnRefresh.Click += (_, _) => LoadData();
 
         return bar;
     }
@@ -219,14 +161,26 @@ public class BreedForm : Form
         txtSearch = new TextBox
         {
             Left = 40,
-            Top = 10,
+            Top = 8,
             Width = 280,
-            Font = new Font("Segoe UI", 9.5f),
+            Font = new Font("Segoe UI", 11f), // Bigger font scales textbox up
             PlaceholderText = "Search breeds..."
         };
         txtSearch.TextChanged += (_, _) => FilterData();
 
-        bar.Controls.AddRange(new Control[] { ico, txtSearch });
+        var btnAdd = MakeToolButton("Add", UIHelper.Success, 80);
+        btnAdd.Left = txtSearch.Right + 16;
+        btnAdd.Top = 8;
+        btnAdd.Height = 31; // Prevent text chunking
+        btnAdd.Click += BtnAdd_Click;
+
+        var btnRefresh = MakeToolButton("Reset", Color.FromArgb(108, 117, 125), 80);
+        btnRefresh.Left = btnAdd.Right + 8;
+        btnRefresh.Top = 8;
+        btnRefresh.Height = 31;
+        btnRefresh.Click += (_, _) => { txtSearch.Clear(); LoadData(); };
+
+        bar.Controls.AddRange(new Control[] { ico, txtSearch, btnAdd, btnRefresh });
         return bar;
     }
 
@@ -252,17 +206,13 @@ public class BreedForm : Form
 
         UIHelper.StyleGrid(grid);
 
-        grid.SelectionChanged += (_, _) =>
-        {
-            bool hasRow = grid.SelectedRows.Count > 0;
-            btnEdit.Enabled = hasRow;
-            btnDelete.Enabled = hasRow;
-        };
+        grid.CellPainting += (_, e) => UIHelper.PaintActionColumn(grid, e);
+        grid.CellMouseClick += (_, e) => UIHelper.HandleActionColumnClick(grid, e, EditRow, DeleteRow);
 
         grid.CellDoubleClick += (_, e) =>
         {
-            if (e.RowIndex >= 0)
-                BtnEdit_Click(null, EventArgs.Empty);
+            if (e.RowIndex >= 0 && (grid.Columns[e.ColumnIndex].Name != "ColAction"))
+                EditRow(e.RowIndex);
         };
 
         return grid;
@@ -305,7 +255,13 @@ public class BreedForm : Form
 
     private void LoadData()
     {
-        _data = DataStore.GetBreeds();
+        try { _data = DataStore.GetBreeds() ?? []; }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message);
+            return;
+        }
+
         FilterData();
     }
 
@@ -316,10 +272,12 @@ public class BreedForm : Form
         _filtered = string.IsNullOrWhiteSpace(q)
             ? _data
             : _data.Where(x =>
-                x.Name.ToLower().Contains(q) ||
-                x.SpeciesName.ToLower().Contains(q) ||
-                x.Description?.ToLower().Contains(q) == true)
+                (x.Name?.ToLower().Contains(q) == true) ||
+                (x.SpeciesName?.ToLower().Contains(q) == true) ||
+                (x.Description?.ToLower().Contains(q) == true))
             .ToList();
+
+        if (_filtered == null) _filtered = [];
 
         _currentPage = 1;
         RefreshGrid();
@@ -327,6 +285,21 @@ public class BreedForm : Form
 
     private void RefreshGrid()
     {
+        if (_filtered == null || _filtered.Count == 0)
+        {
+            dgv.DataSource = null;
+            lblPage.Text = "Page 1 of 1";
+            btnPrev.Enabled = false;
+            btnNext.Enabled = false;
+            UpdateStatusBar(0);
+            lblNoData.Visible = true;
+            dgv.Visible = false;
+            return;
+        }
+
+        lblNoData.Visible = false;
+        dgv.Visible = true;
+
         int totalPages = GetTotalPages();
 
         if (_currentPage > totalPages)
@@ -347,17 +320,26 @@ public class BreedForm : Form
 
         dgv.DataSource = pageData;
 
-        if (dgv.Columns.Count == 0)
-            return;
+        if (dgv.Columns["Id"] != null) dgv.Columns["Id"].Visible = false;
+        if (dgv.Columns["SpeciesName"] != null) dgv.Columns["SpeciesName"].HeaderText = "Species";
+        if (dgv.Columns["Name"] != null) dgv.Columns["Name"].HeaderText = "Breed Name";
 
-        dgv.Columns["Id"].Visible = false;
-        dgv.Columns["SpeciesName"].HeaderText = "Species";
-        dgv.Columns["Name"].HeaderText = "Breed Name";
+        if (dgv.Columns["SpeciesName"] != null) dgv.Columns["SpeciesName"].FillWeight = 25;
+        if (dgv.Columns["Name"] != null) dgv.Columns["Name"].FillWeight = 25;
+        if (dgv.Columns["Status"] != null) dgv.Columns["Status"].FillWeight = 15;
+        if (dgv.Columns["Description"] != null) dgv.Columns["Description"].FillWeight = 35;
 
-        dgv.Columns["SpeciesName"].FillWeight = 25;
-        dgv.Columns["Name"].FillWeight = 25;
-        dgv.Columns["Status"].FillWeight = 15;
-        dgv.Columns["Description"].FillWeight = 35;
+        // Ensure action columns are present
+        if (!dgv.Columns.Contains("ColAction"))
+        {
+            dgv.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "ColAction",
+                HeaderText = "Action",
+                ReadOnly = true,
+                FillWeight = 20
+            });
+        }
 
         lblPage.Text = $"Page {_currentPage} of {totalPages}";
         btnPrev.Enabled = _currentPage > 1;
@@ -419,11 +401,10 @@ public class BreedForm : Form
         LoadData();
     }
 
-    private void BtnEdit_Click(object? s, EventArgs e)
+    private void EditRow(int rowIndex)
     {
-        if (dgv.SelectedRows.Count == 0) return;
-
-        int id = (int)dgv.SelectedRows[0].Cells["Id"].Value!;
+        if (rowIndex < 0 || rowIndex >= _data.Count) return;
+        int id = (int)dgv.Rows[rowIndex].Cells["Id"].Value;
         var item = _data.FirstOrDefault(x => x.Id == id);
         if (item == null) return;
 
@@ -434,11 +415,10 @@ public class BreedForm : Form
         LoadData();
     }
 
-    private void BtnDelete_Click(object? s, EventArgs e)
+    private void DeleteRow(int rowIndex)
     {
-        if (dgv.SelectedRows.Count == 0) return;
-
-        int id = (int)dgv.SelectedRows[0].Cells["Id"].Value!;
+        if (rowIndex < 0 || rowIndex >= _data.Count) return;
+        int id = (int)dgv.Rows[rowIndex].Cells["Id"].Value;
         var item = _data.FirstOrDefault(x => x.Id == id);
         if (item == null) return;
 

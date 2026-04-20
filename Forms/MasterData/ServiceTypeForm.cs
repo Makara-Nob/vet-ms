@@ -7,6 +7,17 @@ public class ServiceTypeForm : Form
 {
     private DataGridView dgv = null!;
     private TextBox txtSearch = null!;
+    private Label lblStatus = null!;
+    
+    private int _currentPage = 1;
+    private int _pageSize = 10;
+    private List<ServiceType> _filtered = [];
+
+    private Button btnPrev = null!;
+    private Button btnNext = null!;
+    private Label lblPage = null!;
+    private Label lblNoData = null!;
+
     private List<ServiceType> _data = [];
 
     public ServiceTypeForm()
@@ -20,86 +31,331 @@ public class ServiceTypeForm : Form
         Text = "Service Types";
         BackColor = UIHelper.LightBg;
 
-        Controls.Add(UIHelper.CreateHeader("Service Types", "Manage clinic services and their pricing"));
+        dgv = BuildGrid();
 
-        var pnlSearch = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = Color.White, Padding = new Padding(12, 8, 12, 0) };
-        var lblSearch = new Label { Text = "Search:", AutoSize = true, Left = 12, Top = 14, Font = new Font("Segoe UI", 9f) };
-        txtSearch = new TextBox { Left = 68, Top = 11, Width = 240, Font = new Font("Segoe UI", 9.5f) };
-        txtSearch.TextChanged += (_, _) => FilterData();
-        pnlSearch.Controls.AddRange(new Control[] { lblSearch, txtSearch });
-
-        dgv = new DataGridView
+        var contentPanel = new Panel
         {
             Dock = DockStyle.Fill,
+            BackColor = Color.White,
+            Padding = new Padding(12)
+        };
+
+        var gridContainer = new Panel
+        {
+            Height = 420,
+            Dock = DockStyle.Top
+        };
+
+        var paginationBar = BuildPaginationBar();
+        paginationBar.Dock = DockStyle.Bottom;
+
+        dgv.Dock = DockStyle.Fill;
+        
+        lblNoData = UIHelper.CreateEmptyDataLabel("No services or records yet.");
+
+        gridContainer.Controls.Add(lblNoData);
+        gridContainer.Controls.Add(dgv);
+        gridContainer.Controls.Add(paginationBar);
+        lblNoData.BringToFront();
+        dgv.BringToFront();
+
+        contentPanel.Controls.Add(gridContainer);
+
+        Controls.Add(contentPanel);
+        Controls.Add(BuildStatusBar());
+        Controls.Add(BuildSearchBar());
+        Controls.Add(UIHelper.CreateHeader(
+            "Service Types",
+            "Manage clinic services and their pricing"));
+    }
+
+    // ───────────────── SEARCH ─────────────────
+    private Panel BuildSearchBar()
+    {
+        var bar = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 46,
+            BackColor = UIHelper.LightBg,
+            Padding = new Padding(12, 8, 12, 6)
+        };
+
+        var ico = new Label
+        {
+            Text = "🔍",
+            Width = 24,
+            Height = 26,
+            Left = 14,
+            Top = 10,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+
+        txtSearch = new TextBox
+        {
+            Left = 40,
+            Top = 8,
+            Width = 280,
+            Font = new Font("Segoe UI", 11f),
+            PlaceholderText = "Search services..."
+        };
+
+        txtSearch.TextChanged += (_, _) => FilterData();
+
+        var btnAdd = MakeToolButton("Add", UIHelper.Success, 80);
+        btnAdd.Left = txtSearch.Right + 16;
+        btnAdd.Top = 8;
+        btnAdd.Height = 31;
+        btnAdd.Click += BtnAdd_Click;
+
+        var btnRefresh = MakeToolButton("Reset", Color.FromArgb(108, 117, 125), 80);
+        btnRefresh.Left = btnAdd.Right + 8;
+        btnRefresh.Top = 8;
+        btnRefresh.Height = 31;
+        btnRefresh.Click += (_, _) => { txtSearch.Clear(); LoadData(); };
+
+        bar.Controls.AddRange(new Control[] { ico, txtSearch, btnAdd, btnRefresh });
+        return bar;
+    }
+
+    // ───────────────── GRID ─────────────────
+    private DataGridView BuildGrid()
+    {
+        var grid = new DataGridView
+        {
+            Dock = DockStyle.Fill,
+            BorderStyle = BorderStyle.None,
+            BackgroundColor = Color.White,
             AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
+
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
             MultiSelect = false,
             ReadOnly = true,
+            RowHeadersVisible = false,
             AllowUserToAddRows = false,
             AllowUserToDeleteRows = false,
-            RowHeadersVisible = false
+            AllowUserToResizeRows = false,
+            AllowUserToResizeColumns = false,
+            Cursor = Cursors.Hand
         };
-        UIHelper.StyleGrid(dgv);
-        dgv.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) BtnEdit_Click(null, EventArgs.Empty); };
 
-        var pnlBtn = new Panel { Dock = DockStyle.Bottom, Height = 52, BackColor = Color.White, Padding = new Padding(12, 9, 12, 9) };
-        var btnAdd     = UIHelper.CreateButton("+ Add",     UIHelper.Success);
-        var btnEdit    = UIHelper.CreateButton("✎ Edit",    UIHelper.Accent);
-        var btnDelete  = UIHelper.CreateButton("✕ Delete",  UIHelper.Danger);
-        var btnRefresh = UIHelper.CreateButton("↺ Refresh", Color.FromArgb(108, 117, 125));
+        UIHelper.StyleGrid(grid);
 
-        int x = 0;
-        foreach (var b in new[] { btnAdd, btnEdit, btnDelete, btnRefresh })
-        { b.Left = x; b.Top = 10; pnlBtn.Controls.Add(b); x += 98; }
+        grid.CellPainting += (_, e) => UIHelper.PaintActionColumn(grid, e);
+        grid.CellMouseClick += (_, e) => UIHelper.HandleActionColumnClick(grid, e, EditRow, DeleteRow);
 
-        btnAdd.Click     += BtnAdd_Click;
-        btnEdit.Click    += BtnEdit_Click;
-        btnDelete.Click  += BtnDelete_Click;
-        btnRefresh.Click += (_, _) => LoadData();
+        grid.CellDoubleClick += (_, e) =>
+        {
+            if (e.RowIndex >= 0 && (grid.Columns[e.ColumnIndex].Name != "ColAction"))
+                EditRow(e.RowIndex);
+        };
 
-        var sep = new Panel { Dock = DockStyle.Bottom, Height = 1, BackColor = Color.FromArgb(220, 225, 230) };
-
-        Controls.Add(dgv);
-        Controls.Add(pnlSearch);
-        Controls.Add(sep);
-        Controls.Add(pnlBtn);
+        return grid;
     }
 
+    // ───────────────── PAGINATION ─────────────────
+    private Panel BuildPaginationBar()
+    {
+        var bar = new Panel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 36,
+            BackColor = Color.White
+        };
+
+        var topLine = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 1,
+            BackColor = Color.FromArgb(230, 232, 235)
+        };
+
+        btnPrev = MakeToolButton("Prev", Color.FromArgb(108, 117, 125), 80);
+        btnNext = MakeToolButton("Next", Color.FromArgb(108, 117, 125), 80);
+
+        lblPage = new Label
+        {
+            AutoSize = false,
+            Width = 100,
+            Height = 30,
+            Font = new Font("Segoe UI", 9f),
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+
+        btnPrev.Top = btnNext.Top = 3;
+        btnPrev.Height = btnNext.Height = 30;
+
+        btnPrev.Click += (_, _) =>
+        {
+            if (_currentPage > 1)
+            {
+                _currentPage--;
+                RefreshGrid();
+            }
+        };
+
+        btnNext.Click += (_, _) =>
+        {
+            int totalPages = GetTotalPages();
+            if (_currentPage < totalPages)
+            {
+                _currentPage++;
+                RefreshGrid();
+            }
+        };
+
+        bar.Resize += (_, _) =>
+        {
+            btnNext.Left = bar.Width - btnNext.Width - 16;
+            lblPage.Left = btnNext.Left - lblPage.Width - 8;
+            lblPage.Top = btnNext.Top;
+            btnPrev.Left = lblPage.Left - btnPrev.Width - 8;
+        };
+
+        bar.Controls.Add(topLine);
+        bar.Controls.Add(btnPrev);
+        bar.Controls.Add(lblPage);
+        bar.Controls.Add(btnNext);
+
+        return bar;
+    }
+
+    // ───────────────── STATUS ─────────────────
+    private Panel BuildStatusBar()
+    {
+        var bar = new Panel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 28,
+            BackColor = Color.White
+        };
+
+        lblStatus = new Label
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12, 0, 0, 0),
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Segoe UI", 8.5f),
+            ForeColor = Color.FromArgb(90, 100, 115)
+        };
+
+        var topLine = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 1,
+            BackColor = Color.FromArgb(230, 232, 235)
+        };
+
+        bar.Controls.Add(lblStatus);
+        bar.Controls.Add(topLine);
+
+        return bar;
+    }
+
+    // ───────────────── DATA ─────────────────
     private void LoadData()
     {
-        try { _data = DataStore.GetServiceTypes(); }
-        catch (Exception ex) { MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        try { _data = DataStore.GetServiceTypes() ?? []; }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message);
+            return;
+        }
+
         FilterData();
     }
 
     private void FilterData()
     {
+        if (txtSearch == null || _data == null) return;
+
         var q = txtSearch.Text.Trim().ToLower();
-        var list = string.IsNullOrEmpty(q)
+
+        _filtered = string.IsNullOrWhiteSpace(q)
             ? _data
-            : _data.Where(x => x.Name.ToLower().Contains(q)
-                             || x.Category.ToLower().Contains(q)
-                             || x.Description.ToLower().Contains(q)).ToList();
+            : _data.Where(x =>
+                x != null &&
+                ((x.Name?.ToLower().Contains(q) == true) ||
+                 (x.Category?.ToLower().Contains(q) == true) ||
+                 (x.Description?.ToLower().Contains(q) == true)))
+            .ToList();
 
-        dgv.DataSource = list.Select(x => new
+        if (_filtered == null) _filtered = [];
+
+        _currentPage = 1;
+        RefreshGrid();
+    }
+
+    private void RefreshGrid()
+    {
+        if (dgv == null || lblStatus == null || lblPage == null || btnPrev == null || btnNext == null || lblNoData == null) return;
+
+        if (_filtered == null || _filtered.Count == 0)
         {
-            x.Id,
-            x.Name,
-            x.Category,
-            Price  = x.Price.ToString("N2"),
-            Status = x.IsActive ? "Active" : "Inactive",
-            x.Description                               // last → fills remaining space
-        }).ToList();
+            dgv.DataSource = null;
+            lblStatus.Text = "0 records";
+            lblPage.Text = "Page 1 / 1";
+            btnPrev.Enabled = false;
+            btnNext.Enabled = false;
+            lblNoData.Visible = true;
+            dgv.Visible = false;
+            return;
+        }
 
-        if (dgv.Columns.Count == 0) return;
-        if (dgv.Columns["Id"]          is { } cId)       cId.Visible = false;
+        lblNoData.Visible = false;
+        dgv.Visible = true;
+
+        int skip = (_currentPage - 1) * _pageSize;
+
+        var pageData = _filtered
+            .Skip(skip)
+            .Take(_pageSize)
+            .Select(x => new
+            {
+                x.Id,
+                x.Name,
+                x.Category,
+                Price  = x.Price.ToString("N2"),
+                Status = x.IsActive ? "Active" : "Inactive",
+                x.Description
+            })
+            .ToList();
+
+        dgv.DataSource = pageData;
+
+        if (dgv.Columns["Id"] != null) dgv.Columns["Id"].Visible = false;
         if (dgv.Columns["Name"]        is { } cName)     cName.Width     = 180;
         if (dgv.Columns["Category"]    is { } cCategory) cCategory.Width = 140;
         if (dgv.Columns["Price"]       is { } cPrice)    cPrice.Width    = 100;
         if (dgv.Columns["Status"]      is { } cSt)       cSt.Width       = 90;
         if (dgv.Columns["Description"] is { } cDesc)     cDesc.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+
+        if (!dgv.Columns.Contains("ColAction"))
+        {
+            dgv.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "ColAction",
+                HeaderText = "Action",
+                ReadOnly = true,
+                FillWeight = 20
+            });
+        }
+
+        int totalPages = GetTotalPages();
+
+        lblStatus.Text = $"{_filtered.Count} records";
+        lblPage.Text = $"Page {_currentPage} / {totalPages}";
+
+        btnPrev.Enabled = _currentPage > 1;
+        btnNext.Enabled = _currentPage < totalPages;
     }
 
+    private int GetTotalPages()
+    {
+        if (_filtered == null || _filtered.Count == 0) return 1;
+        return Math.Max(1, (int)Math.Ceiling(_filtered.Count / (double)_pageSize));
+    }
+
+    // ───────────────── BUTTONS ─────────────────
     private void BtnAdd_Click(object? s, EventArgs e)
     {
         using var dlg = new ServiceTypeDialog();
@@ -110,10 +366,10 @@ public class ServiceTypeForm : Form
         LoadData();
     }
 
-    private void BtnEdit_Click(object? s, EventArgs e)
+    private void EditRow(int rowIndex)
     {
-        if (dgv.SelectedRows.Count == 0) { MessageBox.Show("Select a record to edit.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-        if (dgv.SelectedRows[0].Cells["Id"]?.Value is not int id) return;
+        if (rowIndex < 0 || rowIndex >= dgv.Rows.Count) return;
+        if (dgv.Rows[rowIndex].Cells["Id"]?.Value is not int id) return;
         var item = _data.FirstOrDefault(x => x.Id == id);
         if (item is null) return;
 
@@ -131,10 +387,10 @@ public class ServiceTypeForm : Form
         LoadData();
     }
 
-    private void BtnDelete_Click(object? s, EventArgs e)
+    private void DeleteRow(int rowIndex)
     {
-        if (dgv.SelectedRows.Count == 0) { MessageBox.Show("Select a record to delete.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-        if (dgv.SelectedRows[0].Cells["Id"]?.Value is not int id) return;
+        if (rowIndex < 0 || rowIndex >= dgv.Rows.Count) return;
+        if (dgv.Rows[rowIndex].Cells["Id"]?.Value is not int id) return;
         var item = _data.FirstOrDefault(x => x.Id == id);
         if (item is null) return;
 
@@ -144,6 +400,28 @@ public class ServiceTypeForm : Form
         try { DataStore.Delete(item); }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
         LoadData();
+    }
+
+    // ───────────────── BUTTON STYLE ─────────────────
+    private static Button MakeToolButton(string text, Color back, int width)
+    {
+        var btn = new Button
+        {
+            Text = text,
+            Width = width,
+            Height = 34,
+            BackColor = back,
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            Cursor = Cursors.Hand
+        };
+
+        btn.FlatAppearance.BorderSize = 0;
+        btn.FlatAppearance.MouseOverBackColor = ControlPaint.Light(back);
+        btn.FlatAppearance.MouseDownBackColor = ControlPaint.Dark(back);
+
+        return btn;
     }
 }
 
@@ -162,7 +440,7 @@ public class ServiceTypeDialog : Form
     public ServiceTypeDialog(ServiceType? existing = null)
     {
         Text = existing is null ? "Add Service Type" : "Edit Service Type";
-        Size = new Size(440, 360);
+        Size = new Size(600, 500);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false;

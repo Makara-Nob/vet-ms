@@ -102,4 +102,67 @@ public static class UIHelper
             Font = new Font("Segoe UI", 9.5f),
             Margin = new Padding(0, 0, 0, 6)
         };
+
+    public static Label CreateEmptyDataLabel(string text)
+    {
+        return new Label
+        {
+            Text = text,
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleCenter,
+            Font = new Font("Segoe UI", 12f, FontStyle.Italic),
+            ForeColor = Color.Gray,
+            BackColor = Color.White,
+            Visible = false
+        };
+    }
+
+    public static void PaintActionColumn(DataGridView grid, DataGridViewCellPaintingEventArgs e, string action1 = "Edit", string action2 = "Delete")
+    {
+        if (e.RowIndex < 0 || e.ColumnIndex < 0 || grid.Columns[e.ColumnIndex].Name != "ColAction") return;
+
+        e.PaintBackground(e.CellBounds, true);
+
+        bool isSelected = (e.State & DataGridViewElementStates.Selected) == DataGridViewElementStates.Selected;
+        using var font = new Font("Segoe UI", 9f, FontStyle.Underline);
+
+        var szEdit = TextRenderer.MeasureText(e.Graphics, action1, font);
+        var szDel = TextRenderer.MeasureText(e.Graphics, action2, font);
+
+        int yEdit = e.CellBounds.Y + (e.CellBounds.Height - szEdit.Height) / 2;
+        int yDel = e.CellBounds.Y + (e.CellBounds.Height - szDel.Height) / 2;
+
+        int xEdit = e.CellBounds.X + 16;
+        int xDel = xEdit + szEdit.Width + 16;
+
+        var colorEdit = isSelected ? Color.White : Accent;
+        var colorDel = isSelected ? Color.White : Danger;
+
+        TextRenderer.DrawText(e.Graphics, action1, font, new Point(xEdit, yEdit), colorEdit);
+        TextRenderer.DrawText(e.Graphics, action2, font, new Point(xDel, yDel), colorDel);
+
+        e.Handled = true;
+    }
+
+    public static void HandleActionColumnClick(DataGridView grid, DataGridViewCellMouseEventArgs e, Action<int> onEdit, Action<int> onDelete, string action1 = "Edit", string action2 = "Delete")
+    {
+        if (e.RowIndex < 0 || e.ColumnIndex < 0 || e.Button != MouseButtons.Left || grid.Columns[e.ColumnIndex].Name != "ColAction") return;
+
+        using var font = new Font("Segoe UI", 9f, FontStyle.Underline);
+        
+        var szEdit = TextRenderer.MeasureText(action1, font);
+        var szDel = TextRenderer.MeasureText(action2, font);
+        
+        int xEdit = 16;
+        int xDel = xEdit + szEdit.Width + 16;
+        
+        var rectEdit = new Rectangle(xEdit - 6, 0, szEdit.Width + 12, grid.Rows[e.RowIndex].Height);
+        var rectDel = new Rectangle(xDel - 6, 0, szDel.Width + 12, grid.Rows[e.RowIndex].Height);
+        
+        if (rectEdit.Contains(e.Location))
+            onEdit(e.RowIndex);
+        else if (rectDel.Contains(e.Location))
+            onDelete(e.RowIndex);
+    }
 }

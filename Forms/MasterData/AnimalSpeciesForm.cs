@@ -8,8 +8,6 @@ public class AnimalSpeciesForm : Form
     private DataGridView dgv = null!;
     private TextBox txtSearch = null!;
     private Label lblStatus = null!;
-    private Button btnEdit = null!;
-    private Button btnDelete = null!;
     private int _currentPage = 1;
     private int _pageSize = 10;
     private List<AnimalSpecies> _filtered = [];
@@ -17,6 +15,7 @@ public class AnimalSpeciesForm : Form
     private Button btnPrev = null!;
     private Button btnNext = null!;
     private Label lblPage = null!;
+    private Label lblNoData = null!;
 
     private List<AnimalSpecies> _data = [];
 
@@ -33,69 +32,40 @@ public class AnimalSpeciesForm : Form
 
         dgv = BuildGrid();
 
-        Controls.Add(dgv);
+        var contentPanel = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.White,
+            Padding = new Padding(12)
+        };
+
+        var gridContainer = new Panel
+        {
+            Height = 420,
+            Dock = DockStyle.Top
+        };
+
+        var paginationBar = BuildPaginationBar();
+        paginationBar.Dock = DockStyle.Bottom;
+
+        dgv.Dock = DockStyle.Fill;
+
+        lblNoData = UIHelper.CreateEmptyDataLabel("No species or records yet.");
+
+        gridContainer.Controls.Add(lblNoData);
+        gridContainer.Controls.Add(dgv);
+        gridContainer.Controls.Add(paginationBar);
+        lblNoData.BringToFront();
+        dgv.BringToFront(); // Ensure Fill docked control fills the remaining space
+
+        contentPanel.Controls.Add(gridContainer);
+
+        Controls.Add(contentPanel);
         Controls.Add(BuildStatusBar());
         Controls.Add(BuildSearchBar());
-        Controls.Add(BuildToolbar());
         Controls.Add(UIHelper.CreateHeader(
             "Animal Species",
             "Manage animal species / types"));
-    }
-
-    // ───────────────── TOOLBAR ─────────────────
-    private Panel BuildToolbar()
-    {
-        var bar = new Panel
-        {
-            Dock = DockStyle.Top,
-            Height = 50,
-            BackColor = Color.White
-        };
-
-        var topLine = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = Color.FromArgb(230, 232, 235) };
-        var botLine = new Panel { Dock = DockStyle.Bottom, Height = 1, BackColor = Color.FromArgb(230, 232, 235) };
-
-        var btnAdd = MakeToolButton("＋ Add", UIHelper.Success, 100);
-        btnEdit = MakeToolButton("✎ Edit", UIHelper.Accent, 120);
-        btnDelete = MakeToolButton("✕ Delete", UIHelper.Danger, 120);
-        var btnRefresh = MakeToolButton("↺ Refresh", Color.FromArgb(90, 100, 115), 120);
-
-        btnEdit.Enabled = false;
-        btnDelete.Enabled = false;
-
-        int x = 12;
-
-        foreach (var b in new[] { btnAdd, btnEdit, btnDelete })
-        {
-            b.Left = x;
-            b.Top = 9;
-            bar.Controls.Add(b);
-            x += b.Width + 8;
-        }
-
-        var div = new Panel
-        {
-            Width = 1,
-            Height = 28,
-            Left = x,
-            Top = 11,
-            BackColor = Color.FromArgb(220, 225, 230)
-        };
-        bar.Controls.Add(div);
-
-        btnRefresh.Left = x + 12;
-        btnRefresh.Top = 9;
-        bar.Controls.Add(btnRefresh);
-
-        bar.Controls.Add(topLine);
-        bar.Controls.Add(botLine);
-
-        btnAdd.Click += BtnAdd_Click;
-        btnEdit.Click += BtnEdit_Click;
-        btnDelete.Click += BtnDelete_Click;
-        btnRefresh.Click += (_, _) => LoadData();
-
-        return bar;
     }
 
     // ───────────────── SEARCH ─────────────────
@@ -122,17 +92,27 @@ public class AnimalSpeciesForm : Form
         txtSearch = new TextBox
         {
             Left = 40,
-            Top = 10,
+            Top = 8,
             Width = 280,
-            Font = new Font("Segoe UI", 9.5f),
+            Font = new Font("Segoe UI", 11f),
             PlaceholderText = "Search species..."
         };
 
         txtSearch.TextChanged += (_, _) => FilterData();
 
-        bar.Controls.Add(ico);
-        bar.Controls.Add(txtSearch);
+        var btnAdd = MakeToolButton("Add", UIHelper.Success, 80);
+        btnAdd.Left = txtSearch.Right + 16;
+        btnAdd.Top = 8;
+        btnAdd.Height = 31;
+        btnAdd.Click += BtnAdd_Click;
 
+        var btnRefresh = MakeToolButton("Reset", Color.FromArgb(108, 117, 125), 80);
+        btnRefresh.Left = btnAdd.Right + 8;
+        btnRefresh.Top = 8;
+        btnRefresh.Height = 31;
+        btnRefresh.Click += (_, _) => { txtSearch.Clear(); LoadData(); };
+
+        bar.Controls.AddRange(new Control[] { ico, txtSearch, btnAdd, btnRefresh });
         return bar;
     }
 
@@ -149,56 +129,57 @@ public class AnimalSpeciesForm : Form
             MultiSelect = false,
             ReadOnly = true,
             RowHeadersVisible = false,
-            AllowUserToAddRows = false
+            AllowUserToAddRows = false,
+            AllowUserToDeleteRows = false,
+            AllowUserToResizeRows = false,
+            Cursor = Cursors.Hand
         };
 
         UIHelper.StyleGrid(grid);
 
-        grid.SelectionChanged += (_, _) =>
-        {
-            bool has = grid.SelectedRows.Count > 0;
-            btnEdit.Enabled = has;
-            btnDelete.Enabled = has;
-        };
+        grid.CellPainting += (_, e) => UIHelper.PaintActionColumn(grid, e);
+        grid.CellMouseClick += (_, e) => UIHelper.HandleActionColumnClick(grid, e, EditRow, DeleteRow);
 
         grid.CellDoubleClick += (_, e) =>
         {
-            if (e.RowIndex >= 0)
-                BtnEdit_Click(null, EventArgs.Empty);
+            if (e.RowIndex >= 0 && (grid.Columns[e.ColumnIndex].Name != "ColAction"))
+                EditRow(e.RowIndex);
         };
 
         return grid;
     }
 
-    // ───────────────── STATUS ─────────────────
-    private Panel BuildStatusBar()
+    // ───────────────── PAGINATION ─────────────────
+    private Panel BuildPaginationBar()
     {
         var bar = new Panel
         {
             Dock = DockStyle.Bottom,
-            Height = 38,
+            Height = 36,
             BackColor = Color.White
         };
 
-        lblStatus = new Label
+        var topLine = new Panel
         {
-            Left = 12,
-            Top = 11,
-            AutoSize = true,
-            Font = new Font("Segoe UI", 8.5f)
+            Dock = DockStyle.Top,
+            Height = 1,
+            BackColor = Color.FromArgb(230, 232, 235)
         };
 
-        btnPrev = MakeToolButton("◀ Prev", Color.FromArgb(108, 117, 125), 80);
-        btnNext = MakeToolButton("Next ▶", Color.FromArgb(108, 117, 125), 80);
+        btnPrev = MakeToolButton("Prev", Color.FromArgb(108, 117, 125), 80);
+        btnNext = MakeToolButton("Next", Color.FromArgb(108, 117, 125), 80);
 
         lblPage = new Label
         {
-            AutoSize = true,
-            Font = new Font("Segoe UI", 8.5f),
+            AutoSize = false,
+            Width = 100,
+            Height = 30,
+            Font = new Font("Segoe UI", 9f),
             TextAlign = ContentAlignment.MiddleCenter
         };
 
-        btnPrev.Top = btnNext.Top = 2;
+        btnPrev.Top = btnNext.Top = 3;
+        btnPrev.Height = btnNext.Height = 30;
 
         btnPrev.Click += (_, _) =>
         {
@@ -221,13 +202,13 @@ public class AnimalSpeciesForm : Form
 
         bar.Resize += (_, _) =>
         {
-            btnNext.Left = bar.Width - btnNext.Width - 12;
-            lblPage.Left = btnNext.Left - 90;
-            lblPage.Top = 11;
+            btnNext.Left = bar.Width - btnNext.Width - 16;
+            lblPage.Left = btnNext.Left - lblPage.Width - 8;
+            lblPage.Top = btnNext.Top;
             btnPrev.Left = lblPage.Left - btnPrev.Width - 8;
         };
 
-        bar.Controls.Add(lblStatus);
+        bar.Controls.Add(topLine);
         bar.Controls.Add(btnPrev);
         bar.Controls.Add(lblPage);
         bar.Controls.Add(btnNext);
@@ -235,10 +216,42 @@ public class AnimalSpeciesForm : Form
         return bar;
     }
 
+    // ───────────────── STATUS ─────────────────
+    private Panel BuildStatusBar()
+    {
+        var bar = new Panel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 28,
+            BackColor = Color.White
+        };
+
+        lblStatus = new Label
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12, 0, 0, 0),
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Segoe UI", 8.5f),
+            ForeColor = Color.FromArgb(90, 100, 115)
+        };
+
+        var topLine = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 1,
+            BackColor = Color.FromArgb(230, 232, 235)
+        };
+
+        bar.Controls.Add(lblStatus);
+        bar.Controls.Add(topLine);
+
+        return bar;
+    }
+
     // ───────────────── DATA ─────────────────
     private void LoadData()
     {
-        try { _data = DataStore.GetAnimalSpecies(); }
+        try { _data = DataStore.GetAnimalSpecies() ?? []; }
         catch (Exception ex)
         {
             MessageBox.Show(ex.Message);
@@ -255,9 +268,11 @@ public class AnimalSpeciesForm : Form
         _filtered = string.IsNullOrWhiteSpace(q)
             ? _data
             : _data.Where(x =>
-                x.Name.ToLower().Contains(q) ||
-                x.Description?.ToLower().Contains(q) == true)
+                (x.Name?.ToLower().Contains(q) == true) ||
+                (x.Description?.ToLower().Contains(q) == true))
             .ToList();
+
+        if (_filtered == null) _filtered = [];
 
         _currentPage = 1;
         RefreshGrid();
@@ -265,6 +280,21 @@ public class AnimalSpeciesForm : Form
 
     private void RefreshGrid()
     {
+        if (_filtered == null || _filtered.Count == 0)
+        {
+            dgv.DataSource = null;
+            lblStatus.Text = "0 records";
+            lblPage.Text = "Page 1 / 1";
+            btnPrev.Enabled = false;
+            btnNext.Enabled = false;
+            lblNoData.Visible = true;
+            dgv.Visible = false;
+            return;
+        }
+
+        lblNoData.Visible = false;
+        dgv.Visible = true;
+
         int skip = (_currentPage - 1) * _pageSize;
 
         var pageData = _filtered
@@ -281,10 +311,19 @@ public class AnimalSpeciesForm : Form
 
         dgv.DataSource = pageData;
 
-        if (dgv.Columns.Count == 0) return;
+        if (dgv.Columns["Id"] != null) dgv.Columns["Id"].Visible = false;
+        if (dgv.Columns["Name"] != null) dgv.Columns["Name"].HeaderText = "Species Name";
 
-        dgv.Columns["Id"].Visible = false;
-        dgv.Columns["Name"].HeaderText = "Species Name";
+        if (!dgv.Columns.Contains("ColAction"))
+        {
+            dgv.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "ColAction",
+                HeaderText = "Action",
+                ReadOnly = true,
+                FillWeight = 20
+            });
+        }
 
         int totalPages = GetTotalPages();
 
@@ -310,11 +349,10 @@ public class AnimalSpeciesForm : Form
         LoadData();
     }
 
-    private void BtnEdit_Click(object? s, EventArgs e)
+    private void EditRow(int rowIndex)
     {
-        if (dgv.SelectedRows.Count == 0) return;
-
-        int id = (int)dgv.SelectedRows[0].Cells["Id"].Value;
+        if (rowIndex < 0 || rowIndex >= dgv.Rows.Count) return;
+        int id = (int)dgv.Rows[rowIndex].Cells["Id"].Value;
         var item = _data.FirstOrDefault(x => x.Id == id);
         if (item == null) return;
 
@@ -329,11 +367,10 @@ public class AnimalSpeciesForm : Form
         LoadData();
     }
 
-    private void BtnDelete_Click(object? s, EventArgs e)
+    private void DeleteRow(int rowIndex)
     {
-        if (dgv.SelectedRows.Count == 0) return;
-
-        int id = (int)dgv.SelectedRows[0].Cells["Id"].Value;
+        if (rowIndex < 0 || rowIndex >= dgv.Rows.Count) return;
+        int id = (int)dgv.Rows[rowIndex].Cells["Id"].Value;
         var item = _data.FirstOrDefault(x => x.Id == id);
         if (item == null) return;
 

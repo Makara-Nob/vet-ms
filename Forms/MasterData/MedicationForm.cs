@@ -7,7 +7,16 @@ public class MedicationForm : Form
 {
     private DataGridView dgv = null!;
     private TextBox txtSearch = null!;
+    private Button btnPrev = null!;
+    private Button btnNext = null!;
+    private Label lblPage = null!;
+    private Label lblStatus = null!;
+    private Label lblNoData = null!;
+
     private List<Medication> _data = [];
+    private List<Medication> _filtered = [];
+    private int _currentPage = 1;
+    private readonly int _pageSize = 20;
 
     public MedicationForm()
     {
@@ -20,13 +29,19 @@ public class MedicationForm : Form
         Text = "Medications";
         BackColor = UIHelper.LightBg;
 
-        Controls.Add(UIHelper.CreateHeader("Medications", "Manage drugs and medication inventory items"));
+        var contentPanel = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.White,
+            Padding = new Padding(12)
+        };
 
-        var pnlSearch = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = Color.White, Padding = new Padding(12, 8, 12, 0) };
-        var lblSearch = new Label { Text = "Search:", AutoSize = true, Left = 12, Top = 14, Font = new Font("Segoe UI", 9f) };
-        txtSearch = new TextBox { Left = 68, Top = 11, Width = 240, Font = new Font("Segoe UI", 9.5f) };
-        txtSearch.TextChanged += (_, _) => FilterData();
-        pnlSearch.Controls.AddRange(new Control[] { lblSearch, txtSearch });
+        var gridContainer = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 420,
+            BackColor = Color.White
+        };
 
         dgv = new DataGridView
         {
@@ -37,69 +52,216 @@ public class MedicationForm : Form
             ReadOnly = true,
             AllowUserToAddRows = false,
             AllowUserToDeleteRows = false,
-            RowHeadersVisible = false
+            AllowUserToResizeRows = false,
+            RowHeadersVisible = false,
+            BorderStyle = BorderStyle.None,
+            BackgroundColor = Color.White,
+            Cursor = Cursors.Hand
         };
+        
         UIHelper.StyleGrid(dgv);
-        dgv.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) BtnEdit_Click(null, EventArgs.Empty); };
 
-        var pnlBtn = new Panel { Dock = DockStyle.Bottom, Height = 52, BackColor = Color.White, Padding = new Padding(12, 9, 12, 9) };
-        var btnAdd     = UIHelper.CreateButton("+ Add",     UIHelper.Success);
-        var btnEdit    = UIHelper.CreateButton("✎ Edit",    UIHelper.Accent);
-        var btnDelete  = UIHelper.CreateButton("✕ Delete",  UIHelper.Danger);
-        var btnRefresh = UIHelper.CreateButton("↺ Refresh", Color.FromArgb(108, 117, 125));
+        dgv.CellPainting += (_, e) => UIHelper.PaintActionColumn(dgv, e);
+        dgv.CellMouseClick += (_, e) => UIHelper.HandleActionColumnClick(dgv, e, EditRow, DeleteRow);
+        dgv.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0 && dgv.Columns[e.ColumnIndex].Name != "ColAction") EditRow(e.RowIndex); };
 
-        int x = 0;
-        foreach (var b in new[] { btnAdd, btnEdit, btnDelete, btnRefresh })
-        { b.Left = x; b.Top = 10; pnlBtn.Controls.Add(b); x += 98; }
+        var paginationBar = BuildPaginationBar();
+        paginationBar.Dock = DockStyle.Bottom;
 
-        btnAdd.Click     += BtnAdd_Click;
-        btnEdit.Click    += BtnEdit_Click;
-        btnDelete.Click  += BtnDelete_Click;
-        btnRefresh.Click += (_, _) => LoadData();
+        lblNoData = UIHelper.CreateEmptyDataLabel("No medications or records yet.");
 
-        var sep = new Panel { Dock = DockStyle.Bottom, Height = 1, BackColor = Color.FromArgb(220, 225, 230) };
+        gridContainer.Controls.Add(lblNoData);
+        gridContainer.Controls.Add(dgv);
+        gridContainer.Controls.Add(paginationBar);
+        lblNoData.BringToFront();
+        dgv.BringToFront();
 
-        Controls.Add(dgv);
-        Controls.Add(pnlSearch);
-        Controls.Add(sep);
-        Controls.Add(pnlBtn);
+        contentPanel.Controls.Add(gridContainer);
+
+        Controls.Add(contentPanel);
+        Controls.Add(BuildStatusBar());
+        Controls.Add(BuildSearchBar());
+        Controls.Add(UIHelper.CreateHeader("Medications", "Manage drugs and medication inventory items"));
     }
+
+    private Panel BuildStatusBar()
+    {
+        var pnlStatus = new Panel { Dock = DockStyle.Bottom, Height = 28, BackColor = Color.White };
+        lblStatus = new Label { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(12, 0, 0, 0), ForeColor = Color.FromArgb(90, 100, 115), Font = new Font("Segoe UI", 8.5f) };
+        var topLine = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = Color.FromArgb(230, 232, 235) };
+        pnlStatus.Controls.Add(lblStatus);
+        pnlStatus.Controls.Add(topLine);
+        return pnlStatus;
+    }
+
+    private Panel BuildSearchBar()
+    {
+        var pnl = new Panel { Dock = DockStyle.Top, Height = 56, Padding = new Padding(0, 10, 0, 10) };
+
+        var ico = new Label
+        {
+            Text = "🔍",
+            Width = 24,
+            Height = 26,
+            Left = 4,
+            Top = 13,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+
+        txtSearch = new TextBox
+        {
+            Left = 28,
+            Top = 13,
+            Width = 300,
+            Font = new Font("Segoe UI", 11f),
+            PlaceholderText = "Search medications..."
+        };
+        txtSearch.TextChanged += (_, _) => FilterData();
+
+        var btnAdd = UIHelper.CreateButton("Add", UIHelper.Success, 70, 31);
+        btnAdd.Left = txtSearch.Right + 12;
+        btnAdd.Top = 12;
+        btnAdd.Click += BtnAdd_Click;
+
+        var btnReset = UIHelper.CreateButton("Reset", Color.SlateGray, 70, 31);
+        btnReset.Left = btnAdd.Right + 8;
+        btnReset.Top = 12;
+        btnReset.Click += (_, _) => { txtSearch.Clear(); LoadData(); };
+
+        pnl.Controls.AddRange(new Control[] { ico, txtSearch, btnAdd, btnReset });
+        return pnl;
+    }
+
+    private Panel BuildPaginationBar()
+    {
+        var pnl = new Panel { Height = 48, BackColor = Color.White };
+        var topBorder = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = Color.FromArgb(230, 235, 240) };
+        pnl.Controls.Add(topBorder);
+
+        btnPrev = UIHelper.CreateButton("Prev", Color.FromArgb(108, 117, 125), 60, 26);
+        btnNext = UIHelper.CreateButton("Next", Color.FromArgb(108, 117, 125), 60, 26);
+
+        lblPage = new Label
+        {
+            Text = "Page 1 / 1",
+            AutoSize = false,
+            Width = 100,
+            TextAlign = ContentAlignment.MiddleCenter,
+            Font = new Font("Segoe UI", 9f),
+            ForeColor = Color.FromArgb(64, 64, 64)
+        };
+
+        pnl.Resize += (_, _) =>
+        {
+            btnNext.Left = pnl.Width - btnNext.Width - 16;
+            btnNext.Top = 11;
+            lblPage.Left = btnNext.Left - lblPage.Width - 8;
+            lblPage.Top = 15;
+            btnPrev.Left = lblPage.Left - btnPrev.Width - 8;
+            btnPrev.Top = 11;
+        };
+
+        btnPrev.Click += (_, _) => { if (_currentPage > 1) { _currentPage--; RefreshGrid(); } };
+        btnNext.Click += (_, _) => { if (_currentPage < GetTotalPages()) { _currentPage++; RefreshGrid(); } };
+
+        pnl.Controls.AddRange(new Control[] { btnPrev, lblPage, btnNext });
+        return pnl;
+    }
+
+    private int GetTotalPages() => Math.Max(1, (int)Math.Ceiling(_filtered.Count / (double)_pageSize));
 
     private void LoadData()
     {
-        try { _data = DataStore.GetMedications(); }
-        catch (Exception ex) { MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        try { _data = DataStore.GetMedications() ?? []; }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message);
+            return;
+        }
+
         FilterData();
     }
 
     private void FilterData()
     {
         var q = txtSearch.Text.Trim().ToLower();
-        var list = string.IsNullOrEmpty(q)
+
+        _filtered = string.IsNullOrWhiteSpace(q)
             ? _data
-            : _data.Where(x => x.Name.ToLower().Contains(q)
-                             || x.Category.ToLower().Contains(q)
-                             || x.DosageForm.ToLower().Contains(q)).ToList();
+            : _data.Where(x =>
+                (x.Name?.ToLower().Contains(q) == true) ||
+                (x.Category?.ToLower().Contains(q) == true) ||
+                (x.DosageForm?.ToLower().Contains(q) == true))
+            .ToList();
 
-        dgv.DataSource = list.Select(x => new
+        if (_filtered == null) _filtered = [];
+
+        _currentPage = 1;
+        RefreshGrid();
+    }
+
+    private void RefreshGrid()
+    {
+        if (_filtered == null || _filtered.Count == 0)
         {
-            x.Id,
-            x.Name,
-            x.Category,
-            x.DosageForm,
-            x.Unit,
-            Status = x.IsActive ? "Active" : "Inactive",
-            x.Description                               // last → fills remaining space
-        }).ToList();
+            dgv.DataSource = null;
+            lblStatus.Text = "0 records";
+            lblPage.Text = "Page 1 / 1";
+            btnPrev.Enabled = false;
+            btnNext.Enabled = false;
+            lblNoData.Visible = true;
+            dgv.Visible = false;
+            return;
+        }
 
-        if (dgv.Columns.Count == 0) return;
-        if (dgv.Columns["Id"]          is { } cId)   cId.Visible = false;
+        lblNoData.Visible = false;
+        dgv.Visible = true;
+
+        int skip = (_currentPage - 1) * _pageSize;
+
+        var pageData = _filtered
+            .Skip(skip)
+            .Take(_pageSize)
+            .Select(x => new
+            {
+                x.Id,
+                x.Name,
+                x.Category,
+                x.DosageForm,
+                x.Unit,
+                Status = x.IsActive ? "Active" : "Inactive",
+                x.Description
+            })
+            .ToList();
+
+        dgv.DataSource = pageData;
+
+        if (dgv.Columns["Id"]          != null) dgv.Columns["Id"].Visible = false;
         if (dgv.Columns["Name"]        is { } cName) cName.Width     = 180;
         if (dgv.Columns["Category"]    is { } cCat)  cCat.Width      = 130;
         if (dgv.Columns["DosageForm"]  is { } cDose) { cDose.HeaderText = "Dosage Form"; cDose.Width = 110; }
         if (dgv.Columns["Unit"]        is { } cUnit) cUnit.Width     = 70;
         if (dgv.Columns["Status"]      is { } cSt)   cSt.Width       = 80;
         if (dgv.Columns["Description"] is { } cDesc) cDesc.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+
+        if (!dgv.Columns.Contains("ColAction"))
+        {
+            dgv.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "ColAction",
+                HeaderText = "Action",
+                ReadOnly = true,
+                FillWeight = 20
+            });
+        }
+
+        int totalPages = GetTotalPages();
+
+        lblStatus.Text = $"{_filtered.Count} records";
+        lblPage.Text = $"Page {_currentPage} / {totalPages}";
+
+        btnPrev.Enabled = _currentPage > 1;
+        btnNext.Enabled = _currentPage < totalPages;
     }
 
     private void BtnAdd_Click(object? s, EventArgs e)
@@ -112,10 +274,9 @@ public class MedicationForm : Form
         LoadData();
     }
 
-    private void BtnEdit_Click(object? s, EventArgs e)
+    private void EditRow(int rowIndex)
     {
-        if (dgv.SelectedRows.Count == 0) { MessageBox.Show("Select a record to edit.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-        if (dgv.SelectedRows[0].Cells["Id"]?.Value is not int id) return;
+        if (dgv.Rows[rowIndex].Cells["Id"]?.Value is not int id) return;
         var item = _data.FirstOrDefault(x => x.Id == id);
         if (item is null) return;
 
@@ -134,10 +295,9 @@ public class MedicationForm : Form
         LoadData();
     }
 
-    private void BtnDelete_Click(object? s, EventArgs e)
+    private void DeleteRow(int rowIndex)
     {
-        if (dgv.SelectedRows.Count == 0) { MessageBox.Show("Select a record to delete.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-        if (dgv.SelectedRows[0].Cells["Id"]?.Value is not int id) return;
+        if (dgv.Rows[rowIndex].Cells["Id"]?.Value is not int id) return;
         var item = _data.FirstOrDefault(x => x.Id == id);
         if (item is null) return;
 
