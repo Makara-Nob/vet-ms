@@ -254,7 +254,7 @@ public class AnimalSpeciesForm : Form
         try { _data = DataStore.GetAnimalSpecies() ?? []; }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message);
+            VetMS.Forms.CustomMessageBox.Show(ex.Message);
             return;
         }
 
@@ -287,6 +287,7 @@ public class AnimalSpeciesForm : Form
             lblPage.Text = "Page 1 / 1";
             btnPrev.Enabled = false;
             btnNext.Enabled = false;
+            btnPrev.Visible = btnNext.Visible = lblPage.Visible = false;
             lblNoData.Visible = true;
             dgv.Visible = false;
             return;
@@ -332,6 +333,7 @@ public class AnimalSpeciesForm : Form
 
         btnPrev.Enabled = _currentPage > 1;
         btnNext.Enabled = _currentPage < totalPages;
+        btnPrev.Visible = btnNext.Visible = lblPage.Visible = totalPages > 1;
     }
 
     private int GetTotalPages()
@@ -345,7 +347,9 @@ public class AnimalSpeciesForm : Form
         using var dlg = new AnimalSpeciesDialog();
         if (dlg.ShowDialog() != DialogResult.OK) return;
 
-        DataStore.Insert(dlg.Result);
+        try { DataStore.Insert(dlg.Result); }
+        catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        VetMS.Forms.Toast.Success("Species successfully saved!");
         LoadData();
     }
 
@@ -363,7 +367,9 @@ public class AnimalSpeciesForm : Form
         item.Description = dlg.Result.Description;
         item.IsActive = dlg.Result.IsActive;
 
-        DataStore.Update(item);
+        try { DataStore.Update(item); }
+        catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        VetMS.Forms.Toast.Success("Species successfully updated!");
         LoadData();
     }
 
@@ -374,11 +380,13 @@ public class AnimalSpeciesForm : Form
         var item = _data.FirstOrDefault(x => x.Id == id);
         if (item == null) return;
 
-        if (MessageBox.Show($"Delete {item.Name}?", "Confirm",
+        if (VetMS.Forms.CustomMessageBox.Show($"Delete {item.Name}?", "Confirm",
             MessageBoxButtons.YesNo) != DialogResult.Yes)
             return;
 
-        DataStore.Delete(item);
+        try { DataStore.Delete(item); }
+        catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        VetMS.Forms.Toast.Success("Species successfully deleted!");
         LoadData();
     }
 

@@ -175,7 +175,7 @@ public class MedicationForm : Form
         try { _data = DataStore.GetMedications() ?? []; }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message);
+            VetMS.Forms.CustomMessageBox.Show(ex.Message);
             return;
         }
 
@@ -209,6 +209,7 @@ public class MedicationForm : Form
             lblPage.Text = "Page 1 / 1";
             btnPrev.Enabled = false;
             btnNext.Enabled = false;
+            btnPrev.Visible = btnNext.Visible = lblPage.Visible = false;
             lblNoData.Visible = true;
             dgv.Visible = false;
             return;
@@ -262,6 +263,7 @@ public class MedicationForm : Form
 
         btnPrev.Enabled = _currentPage > 1;
         btnNext.Enabled = _currentPage < totalPages;
+        btnPrev.Visible = btnNext.Visible = lblPage.Visible = totalPages > 1;
     }
 
     private void BtnAdd_Click(object? s, EventArgs e)
@@ -269,8 +271,14 @@ public class MedicationForm : Form
         using var dlg = new MedicationDialog();
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
-        try { DataStore.Insert(dlg.Result); }
-        catch (Exception ex) { MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        try 
+        { 
+            DataStore.Insert(dlg.Result); 
+            DataStore.SaveMedicationSuppliers(dlg.Result.Id, dlg.SelectedSupplierIds);
+        }
+        catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        
+        VetMS.Forms.Toast.Success("Medication successfully saved!");
         LoadData();
     }
 
@@ -290,8 +298,14 @@ public class MedicationForm : Form
         item.Description = dlg.Result.Description;
         item.IsActive    = dlg.Result.IsActive;
 
-        try { DataStore.Update(item); }
-        catch (Exception ex) { MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        try 
+        { 
+            DataStore.Update(item); 
+            DataStore.SaveMedicationSuppliers(item.Id, dlg.SelectedSupplierIds);
+        }
+        catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        
+        VetMS.Forms.Toast.Success("Medication successfully updated!");
         LoadData();
     }
 
@@ -301,11 +315,13 @@ public class MedicationForm : Form
         var item = _data.FirstOrDefault(x => x.Id == id);
         if (item is null) return;
 
-        if (MessageBox.Show($"Delete medication \"{item.Name}\"?", "Confirm Delete",
+        if (VetMS.Forms.CustomMessageBox.Show($"Delete medication \"{item.Name}\"?", "Confirm Delete",
             MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
 
         try { DataStore.Delete(item); }
-        catch (Exception ex) { MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        
+        VetMS.Forms.Toast.Success("Medication successfully deleted!");
         LoadData();
     }
 }
@@ -316,7 +332,10 @@ public class MedicationDialog : Form
     private readonly TextBox txtName, txtUnit, txtDesc;
     private readonly ComboBox cboCategory, cboDosageForm;
     private readonly CheckBox chkActive;
+    private readonly CheckedListBox clbSuppliers;
+    private readonly List<Supplier> _allSuppliers;
     public Medication Result { get; private set; } = new();
+    public List<int> SelectedSupplierIds { get; private set; } = [];
 
     private static readonly string[] Categories  = ["Antibiotic", "Antiparasitic", "Analgesic", "Anti-inflammatory", "Vaccine", "Vitamin", "Antifungal", "Sedative", "Other"];
     private static readonly string[] DosageForms = ["Tablet", "Capsule", "Injection", "Syrup", "Powder", "Cream", "Drops", "Spray", "Other"];
@@ -324,13 +343,13 @@ public class MedicationDialog : Form
     public MedicationDialog(Medication? existing = null)
     {
         Text = existing is null ? "Add Medication" : "Edit Medication";
-        Size = new Size(450, 420);
+        Size = new Size(450, 650);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false;
         BackColor = Color.White;
 
-        var flow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, Padding = new Padding(20, 14, 20, 0), AutoScroll = true };
+        var flow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(20, 14, 20, 0), AutoScroll = true };
 
         flow.Controls.Add(UIHelper.CreateFormLabel("Medication Name *"));
         txtName = UIHelper.CreateTextBox(380);
@@ -347,15 +366,28 @@ public class MedicationDialog : Form
         flow.Controls.Add(cboDosageForm);
 
         flow.Controls.Add(UIHelper.CreateFormLabel("Unit (e.g. mg, ml, tablets)"));
-        txtUnit = UIHelper.CreateTextBox(180);
+        txtUnit = UIHelper.CreateTextBox(380);
+        txtUnit.Margin = new Padding(0, 0, 0, 8);
         flow.Controls.Add(txtUnit);
 
         flow.Controls.Add(UIHelper.CreateFormLabel("Description"));
         txtDesc = new TextBox { Width = 380, Height = 56, Multiline = true, Font = new Font("Segoe UI", 9.5f), ScrollBars = ScrollBars.Vertical, Margin = new Padding(0, 0, 0, 6) };
         flow.Controls.Add(txtDesc);
 
-        chkActive = new CheckBox { Text = "Active", Checked = true, Font = new Font("Segoe UI", 9f) };
+        chkActive = new CheckBox { Text = "Active", Checked = true, Font = new Font("Segoe UI", 9f), Margin = new Padding(0, 4, 0, 8) };
         flow.Controls.Add(chkActive);
+
+        flow.Controls.Add(UIHelper.CreateFormLabel("Approved Suppliers"));
+        clbSuppliers = new CheckedListBox { Width = 380, Height = 160, Font = new Font("Segoe UI", 9f), CheckOnClick = true, Margin = new Padding(0, 0, 0, 10) };
+        
+        _allSuppliers = DataStore.GetSuppliers() ?? [];
+        foreach (var s in _allSuppliers)
+        {
+            clbSuppliers.Items.Add(s);
+        }
+        clbSuppliers.DisplayMember = "CompanyName";
+        clbSuppliers.ValueMember = "Id";
+        flow.Controls.Add(clbSuppliers);
 
         var pnlBtn = new Panel { Dock = DockStyle.Bottom, Height = 50, BackColor = UIHelper.LightBg };
         var btnSave   = UIHelper.CreateButton("Save",   UIHelper.Success, 90);
@@ -384,17 +416,26 @@ public class MedicationDialog : Form
             txtDesc.Text      = existing.Description;
             chkActive.Checked = existing.IsActive;
             Result.Id         = existing.Id;
+
+            var mappedIds = DataStore.GetMedicationSuppliers(existing.Id);
+            for (int i = 0; i < clbSuppliers.Items.Count; i++)
+            {
+                if (clbSuppliers.Items[i] is Supplier s && mappedIds.Contains(s.Id))
+                {
+                    clbSuppliers.SetItemChecked(i, true);
+                }
+            }
         }
     }
 
     private void BtnSave_Click(object? s, EventArgs e)
     {
         if (string.IsNullOrWhiteSpace(txtName.Text))
-        { MessageBox.Show("Medication name is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); txtName.Focus(); return; }
+        { VetMS.Forms.CustomMessageBox.Show("Medication name is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); txtName.Focus(); return; }
         if (cboCategory.SelectedItem is null)
-        { MessageBox.Show("Category is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        { VetMS.Forms.CustomMessageBox.Show("Category is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         if (cboDosageForm.SelectedItem is null)
-        { MessageBox.Show("Dosage form is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        { VetMS.Forms.CustomMessageBox.Show("Dosage form is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
 
         Result = new Medication
         {
@@ -406,6 +447,9 @@ public class MedicationDialog : Form
             Description = txtDesc.Text.Trim(),
             IsActive    = chkActive.Checked
         };
+
+        SelectedSupplierIds = clbSuppliers.CheckedItems.Cast<Supplier>().Select(s => s.Id).ToList();
+
         DialogResult = DialogResult.OK;
     }
 }

@@ -120,49 +120,272 @@ public static class UIHelper
 
     public static void PaintActionColumn(DataGridView grid, DataGridViewCellPaintingEventArgs e, string action1 = "Edit", string action2 = "Delete")
     {
-        if (e.RowIndex < 0 || e.ColumnIndex < 0 || grid.Columns[e.ColumnIndex].Name != "ColAction") return;
+        PaintDynamicActionColumn(grid, e, action1, action2);
+    }
+
+    public static void PaintDynamicActionColumn(DataGridView grid, DataGridViewCellPaintingEventArgs e, params string[] actions)
+    {
+        if (e.RowIndex < 0 || e.ColumnIndex < 0 || grid.Columns[e.ColumnIndex].Name != "ColAction" || actions.Length == 0) return;
 
         e.PaintBackground(e.CellBounds, true);
-
         bool isSelected = (e.State & DataGridViewElementStates.Selected) == DataGridViewElementStates.Selected;
         using var font = new Font("Segoe UI", 9f, FontStyle.Underline);
 
-        var szEdit = TextRenderer.MeasureText(e.Graphics, action1, font);
-        var szDel = TextRenderer.MeasureText(e.Graphics, action2, font);
+        int currentX = e.CellBounds.X + 16;
 
-        int yEdit = e.CellBounds.Y + (e.CellBounds.Height - szEdit.Height) / 2;
-        int yDel = e.CellBounds.Y + (e.CellBounds.Height - szDel.Height) / 2;
+        foreach (var act in actions)
+        {
+            if (string.IsNullOrEmpty(act)) continue;
+            
+            var sz = TextRenderer.MeasureText(e.Graphics, act, font);
+            int y = e.CellBounds.Y + (e.CellBounds.Height - sz.Height) / 2;
+            
+            Color c = Accent; // Default Edit
+            if (act == "Delete") c = Danger;
+            else if (act == "View") c = Success;
+            if (isSelected) c = Color.White;
 
-        int xEdit = e.CellBounds.X + 16;
-        int xDel = xEdit + szEdit.Width + 16;
-
-        var colorEdit = isSelected ? Color.White : Accent;
-        var colorDel = isSelected ? Color.White : Danger;
-
-        TextRenderer.DrawText(e.Graphics, action1, font, new Point(xEdit, yEdit), colorEdit);
-        TextRenderer.DrawText(e.Graphics, action2, font, new Point(xDel, yDel), colorDel);
+            TextRenderer.DrawText(e.Graphics, act, font, new Point(currentX, y), c);
+            currentX += sz.Width + 16;
+        }
 
         e.Handled = true;
     }
 
-    public static void HandleActionColumnClick(DataGridView grid, DataGridViewCellMouseEventArgs e, Action<int> onEdit, Action<int> onDelete, string action1 = "Edit", string action2 = "Delete")
+    public static void HandleActionColumnClick(DataGridView grid, DataGridViewCellMouseEventArgs e, Action<int> onEdit, Action<int>? onDelete = null, string action1 = "Edit", string action2 = "Delete")
     {
-        if (e.RowIndex < 0 || e.ColumnIndex < 0 || e.Button != MouseButtons.Left || grid.Columns[e.ColumnIndex].Name != "ColAction") return;
+        if (onDelete != null)
+            HandleDynamicActionColumnClick(grid, e, (action1, onEdit), (action2, onDelete));
+        else
+            HandleDynamicActionColumnClick(grid, e, (action1, onEdit));
+    }
+
+    public static void HandleDynamicActionColumnClick(DataGridView grid, DataGridViewCellMouseEventArgs e, params (string Name, Action<int> Action)[] actions)
+    {
+        if (e.RowIndex < 0 || e.ColumnIndex < 0 || e.Button != MouseButtons.Left || grid.Columns[e.ColumnIndex].Name != "ColAction" || actions.Length == 0) return;
 
         using var font = new Font("Segoe UI", 9f, FontStyle.Underline);
+        int currentX = 16;
+
+        foreach (var act in actions)
+        {
+            if (string.IsNullOrEmpty(act.Name)) continue;
+
+            var sz = TextRenderer.MeasureText(act.Name, font);
+            var rect = new Rectangle(currentX - 6, 0, sz.Width + 12, grid.Rows[e.RowIndex].Height);
+            
+            if (rect.Contains(e.Location))
+            {
+                act.Action(e.RowIndex);
+                return;
+            }
+            currentX += sz.Width + 16;
+        }
+    }
+
+    public static Panel WrapControl(string labelText, Control ctrl)
+    {
+        // Increased height from 25 to 35, and Margin from 10 to 22 for 'High-Breathing' room
+        var p = new Panel { Width = ctrl.Width, Height = ctrl.Height + 35, Margin = new Padding(0, 0, 0, 22) };
+        var lbl = new Label { 
+            Text = labelText, 
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold), 
+            ForeColor = Color.FromArgb(80, 90, 105), 
+            Top = 0, Left = 0, AutoSize = true 
+        };
+        // Increased Top from 22 to 28 for comfortable gap between label and input
+        ctrl.Top = 28; ctrl.Left = 0;
+        p.Controls.Add(lbl); p.Controls.Add(ctrl);
+        return p;
+    }
+
+    public static Label CreateSectionLabel(string text)
+    {
+        return new Label 
+        { 
+            Text = text.ToUpperInvariant(), 
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), 
+            ForeColor = Color.FromArgb(120, 130, 150), 
+            AutoSize = true, 
+            Margin = new Padding(0, 25, 0, 12) // Significant top margin to separate sections
+        };
+    }
+
+    public static Image CreateProfilePlaceholder(int size)
+    {
+        var bmp = new Bitmap(size, size);
+        using var g = Graphics.FromImage(bmp);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.Clear(Color.FromArgb(240, 242, 245)); // Soft light background
         
-        var szEdit = TextRenderer.MeasureText(action1, font);
-        var szDel = TextRenderer.MeasureText(action2, font);
+        using var pen = new Pen(Color.FromArgb(200, 205, 215), 2f);
+        g.DrawEllipse(pen, 2, 2, size - 4, size - 4);
         
-        int xEdit = 16;
-        int xDel = xEdit + szEdit.Width + 16;
+        // Draw a simple person/pet silhouette
+        using var brush = new SolidBrush(Color.FromArgb(180, 185, 195));
+        g.FillEllipse(brush, size * 0.3f, size * 0.25f, size * 0.4f, size * 0.4f); // Head
+        g.FillEllipse(brush, size * 0.2f, size * 0.65f, size * 0.6f, size * 0.6f); // Shoulders/Body
         
-        var rectEdit = new Rectangle(xEdit - 6, 0, szEdit.Width + 12, grid.Rows[e.RowIndex].Height);
-        var rectDel = new Rectangle(xDel - 6, 0, szDel.Width + 12, grid.Rows[e.RowIndex].Height);
-        
-        if (rectEdit.Contains(e.Location))
-            onEdit(e.RowIndex);
-        else if (rectDel.Contains(e.Location))
-            onDelete(e.RowIndex);
+        return bmp;
+    }
+
+    public static Image CreateAvatar(string name, int size)
+    {
+        var bmp = new Bitmap(size, size);
+        using var g = Graphics.FromImage(bmp);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.Clear(Color.Transparent);
+
+        // Draw circle background with a tiny padding
+        using var brush = new SolidBrush(Color.FromArgb(170, 190, 210));
+        g.FillEllipse(brush, 1, 1, size - 2, size - 2);
+
+        // Draw initial letter, reduced font size to prevent cutting off
+        string letter = string.IsNullOrWhiteSpace(name) ? "?" : name.Substring(0, 1).ToUpper();
+        using var font = new Font("Segoe UI", size / 2.8f, FontStyle.Bold);
+        using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+        g.DrawString(letter, font, Brushes.White, new RectangleF(0, 0, size, size), format);
+
+        return bmp;
+    }
+
+    /// <summary>
+    /// Attaches a click-to-preview lightbox to any PictureBox.
+    /// Pass getImage as a func so the image can be resolved lazily at click time.
+    /// Usage: UIHelper.AttachImageViewer(picAvatar, () => picAvatar.Image);
+    /// </summary>
+    public static void AttachImageViewer(PictureBox pb, Func<Image?> getImage)
+    {
+        // Magnifier cursor hint
+        pb.Cursor = Cursors.Hand;
+
+        // Hover: subtle zoom/opacity hint
+        pb.MouseEnter += (_, _) => {
+            if (getImage() != null) {
+                pb.BackColor = Color.FromArgb(235, 238, 242);
+            }
+        };
+        pb.MouseLeave += (_, _) => {
+            pb.BackColor = LightBg;
+        };
+
+        // Click: open lightbox
+        pb.Click += (_, _) => {
+            var img = getImage();
+            if (img == null) return;
+            ImageLightbox.Show(pb.FindForm()!, img);
+        };
+    }
+}
+
+/// <summary>
+/// A reusable full-screen lightbox overlay for viewing images.
+/// Open with: ImageLightbox.Show(ownerForm, image);
+/// </summary>
+public sealed class ImageLightbox : Form
+{
+    private double _targetOpacity = 1.0;
+    private System.Windows.Forms.Timer? _fadeTimer;
+
+    private ImageLightbox(Form owner, Image image)
+    {
+        // Full-screen borderless dark overlay
+        FormBorderStyle = FormBorderStyle.None;
+        BackColor = Color.FromArgb(0, 0, 5); // Near-perfect black
+        Opacity = 0;
+        ShowInTaskbar = false;
+        StartPosition = FormStartPosition.Manual;
+        Bounds = owner.RectangleToScreen(new Rectangle(Point.Empty, owner.ClientSize));
+        // Cover the whole owner
+        Bounds = Screen.FromControl(owner).Bounds;
+        TopMost = true;
+        KeyPreview = true;
+
+        // ── Close on Escape or click backdrop ────────────────────────────────
+        KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) FadeOut(); };
+        Click   += (_, _) => FadeOut();
+
+        // ── Close "×" button ─────────────────────────────────────────────────
+        var btnClose = new Label
+        {
+            Text      = "✕",
+            Font      = new Font("Segoe UI", 18f),
+            ForeColor = Color.FromArgb(200, 200, 200),
+            BackColor = Color.Transparent,
+            AutoSize  = true,
+            Cursor    = Cursors.Hand,
+            Padding   = new Padding(10)
+        };
+        btnClose.Click += (_, _) => FadeOut();
+
+        // ── Image display ─────────────────────────────────────────────────────
+        var pic = new PictureBox
+        {
+            Image    = image,
+            SizeMode = PictureBoxSizeMode.Zoom,
+            BackColor = Color.Transparent,
+        };
+
+        // Size image box to max 80% of screen, maintaining aspect ratio
+        var screen = Screen.FromControl(owner).WorkingArea;
+        int maxW = (int)(screen.Width  * 0.82);
+        int maxH = (int)(screen.Height * 0.82);
+        double ratio = Math.Min((double)maxW / image.Width, (double)maxH / image.Height);
+        int picW = (int)(image.Width  * ratio);
+        int picH = (int)(image.Height * ratio);
+        pic.Size     = new Size(picW, picH);
+        pic.Location = new Point((screen.Width - picW) / 2, (screen.Height - picH) / 2);
+        pic.Click   += (_, _) => FadeOut();
+
+        // Caption: resolution info
+        var lblInfo = new Label
+        {
+            Text      = $"{image.Width} × {image.Height} px    •    ESC or click to close",
+            Font      = new Font("Segoe UI", 9f),
+            ForeColor = Color.FromArgb(160, 160, 160),
+            BackColor = Color.Transparent,
+            AutoSize  = true,
+        };
+
+        Controls.Add(pic);
+        Controls.Add(lblInfo);
+        Controls.Add(btnClose);
+
+        Load += (_, _) => {
+            btnClose.Location = new Point(screen.Width - btnClose.Width - 20, 20);
+            lblInfo.Location  = new Point((screen.Width - lblInfo.Width) / 2,
+                                           pic.Bottom + 14);
+            FadeIn();
+        };
+    }
+
+    // ── Fade animation ────────────────────────────────────────────────────────
+    private void FadeIn()
+    {
+        _fadeTimer = new System.Windows.Forms.Timer { Interval = 16 };
+        _fadeTimer.Tick += (_, _) => {
+            Opacity += 0.07;
+            if (Opacity >= _targetOpacity) { Opacity = _targetOpacity; _fadeTimer.Stop(); }
+        };
+        _fadeTimer.Start();
+    }
+
+    private void FadeOut()
+    {
+        _fadeTimer?.Stop();
+        _fadeTimer = new System.Windows.Forms.Timer { Interval = 16 };
+        _fadeTimer.Tick += (_, _) => {
+            Opacity -= 0.09;
+            if (Opacity <= 0) { _fadeTimer.Stop(); Close(); }
+        };
+        _fadeTimer.Start();
+    }
+
+    /// <summary>Show a lightbox over the given owner form.</summary>
+    public static void Show(Form owner, Image image)
+    {
+        var lb = new ImageLightbox(owner, image);
+        lb.Show(owner);
+        lb.Activate();
     }
 }

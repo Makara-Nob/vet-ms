@@ -13,15 +13,17 @@ static class Program
         try
         {
             Database.Initialize();
+            Database.SeedData();
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
+            System.IO.File.WriteAllText("db_error.txt", ex.ToString());
+            VetMS.Forms.CustomMessageBox.Show(
                 $"Failed to connect to the database:\n\n{ex.Message}\n\nCheck appsettings.json and make sure PostgreSQL is running.",
                 "Database Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
 
-        Application.Run(new MainForm());
+        Application.Run(new LoginForm());
     }
 }

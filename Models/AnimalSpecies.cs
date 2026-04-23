@@ -1,8 +1,7 @@
 namespace VetMS.Models;
 
-public class AnimalSpecies
+public class AnimalSpecies : BaseEntity
 {
-    public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;

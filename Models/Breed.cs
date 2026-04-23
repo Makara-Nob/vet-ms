@@ -1,8 +1,7 @@
 namespace VetMS.Models;
 
-public class Breed
+public class Breed : BaseEntity
 {
-    public int Id { get; set; }
     public int SpeciesId { get; set; }
     public string SpeciesName { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;

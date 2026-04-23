@@ -258,7 +258,7 @@ public class BreedForm : Form
         try { _data = DataStore.GetBreeds() ?? []; }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message);
+            VetMS.Forms.CustomMessageBox.Show(ex.Message);
             return;
         }
 
@@ -291,6 +291,7 @@ public class BreedForm : Form
             lblPage.Text = "Page 1 of 1";
             btnPrev.Enabled = false;
             btnNext.Enabled = false;
+            btnPrev.Visible = btnNext.Visible = lblPage.Visible = false;
             UpdateStatusBar(0);
             lblNoData.Visible = true;
             dgv.Visible = false;
@@ -344,6 +345,7 @@ public class BreedForm : Form
         lblPage.Text = $"Page {_currentPage} of {totalPages}";
         btnPrev.Enabled = _currentPage > 1;
         btnNext.Enabled = _currentPage < totalPages;
+        btnPrev.Visible = btnNext.Visible = lblPage.Visible = totalPages > 1;
 
         UpdateStatusBar(pageData.Count);
     }
@@ -397,7 +399,9 @@ public class BreedForm : Form
         using var dlg = new BreedDialog();
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
-        DataStore.Insert(dlg.Result);
+        try { DataStore.Insert(dlg.Result); }
+        catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        VetMS.Forms.Toast.Success("Breed successfully saved!");
         LoadData();
     }
 
@@ -411,7 +415,9 @@ public class BreedForm : Form
         using var dlg = new BreedDialog(item);
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
-        DataStore.Update(dlg.Result);
+        try { DataStore.Update(dlg.Result); }
+        catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        VetMS.Forms.Toast.Success("Breed successfully updated!");
         LoadData();
     }
 
@@ -422,10 +428,12 @@ public class BreedForm : Form
         var item = _data.FirstOrDefault(x => x.Id == id);
         if (item == null) return;
 
-        if (MessageBox.Show($"Delete {item.Name}?", "Confirm",
+        if (VetMS.Forms.CustomMessageBox.Show($"Delete {item.Name}?", "Confirm",
             MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
 
-        DataStore.Delete(item);
+        try { DataStore.Delete(item); }
+        catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        VetMS.Forms.Toast.Success("Breed successfully deleted!");
         LoadData();
     }
 }
@@ -581,13 +589,13 @@ public class BreedDialog : Form
     {
         if (cboSpecies.SelectedItem is not AnimalSpecies sp)
         {
-            MessageBox.Show("Select species");
+            VetMS.Forms.CustomMessageBox.Show("Select species");
             return;
         }
 
         if (string.IsNullOrWhiteSpace(txtName.Text))
         {
-            MessageBox.Show("Name required");
+            VetMS.Forms.CustomMessageBox.Show("Name required");
             return;
         }
 

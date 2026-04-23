@@ -1,9 +1,14 @@
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Linq;
+using System.Windows.Forms;
 using VetMS.Data;
 using VetMS.Models;
 
-namespace VetMS.Forms.MasterData;
+namespace VetMS.Forms.Admin;
 
-public class SupplierForm : Form
+public class UserForm : Form
 {
     private DataGridView dgv = null!;
     private TextBox txtSearch = null!;
@@ -13,12 +18,12 @@ public class SupplierForm : Form
     private Label lblStatus = null!;
     private Label lblNoData = null!;
 
-    private List<Supplier> _data = [];
-    private List<Supplier> _filtered = [];
+    private List<User> _data = [];
+    private List<User> _filtered = [];
     private int _currentPage = 1;
     private readonly int _pageSize = 20;
 
-    public SupplierForm()
+    public UserForm()
     {
         InitializeUI();
         LoadData();
@@ -26,7 +31,7 @@ public class SupplierForm : Form
 
     private void InitializeUI()
     {
-        Text = "Suppliers";
+        Text = "User Management";
         BackColor = UIHelper.LightBg;
 
         var contentPanel = new Panel
@@ -68,7 +73,7 @@ public class SupplierForm : Form
         var paginationBar = BuildPaginationBar();
         paginationBar.Dock = DockStyle.Bottom;
 
-        lblNoData = UIHelper.CreateEmptyDataLabel("No suppliers or records yet.");
+        lblNoData = UIHelper.CreateEmptyDataLabel("No users found.");
 
         gridContainer.Controls.Add(lblNoData);
         gridContainer.Controls.Add(dgv);
@@ -81,7 +86,7 @@ public class SupplierForm : Form
         Controls.Add(contentPanel);
         Controls.Add(BuildStatusBar());
         Controls.Add(BuildSearchBar());
-        Controls.Add(UIHelper.CreateHeader("Suppliers", "Manage medication and supply vendors"));
+        Controls.Add(UIHelper.CreateHeader("User Management", "Manage system accounts, roles, and access."));
     }
 
     private Panel BuildStatusBar()
@@ -114,7 +119,7 @@ public class SupplierForm : Form
             Top = 13,
             Width = 300,
             Font = new Font("Segoe UI", 11f),
-            PlaceholderText = "Search suppliers..."
+            PlaceholderText = "Search users..."
         };
         txtSearch.TextChanged += (_, _) => FilterData();
 
@@ -172,7 +177,7 @@ public class SupplierForm : Form
 
     private void LoadData()
     {
-        try { _data = DataStore.GetSuppliers() ?? []; }
+        try { _data = DataStore.GetUsers() ?? []; }
         catch (Exception ex)
         {
             VetMS.Forms.CustomMessageBox.Show(ex.Message);
@@ -189,10 +194,10 @@ public class SupplierForm : Form
         _filtered = string.IsNullOrWhiteSpace(q)
             ? _data
             : _data.Where(x =>
-                (x.CompanyName?.ToLower().Contains(q) == true) ||
-                (x.ContactPerson?.ToLower().Contains(q) == true) ||
-                (x.Phone?.ToLower().Contains(q) == true) ||
-                (x.Email?.ToLower().Contains(q) == true))
+                (x.Username?.ToLower().Contains(q) == true) ||
+                (x.FullName?.ToLower().Contains(q) == true) ||
+                (x.Email?.ToLower().Contains(q) == true) ||
+                (x.Role?.ToLower().Contains(q) == true))
             .ToList();
 
         if (_filtered == null) _filtered = [];
@@ -227,24 +232,22 @@ public class SupplierForm : Form
             .Select(x => new
             {
                 x.Id,
-                Company = x.CompanyName,
-                Contact = x.ContactPerson,
-                x.Phone,
+                x.Username,
+                Name = x.FullName,
                 x.Email,
-                Status  = x.IsActive ? "Active" : "Inactive",
-                x.Address
+                x.Role,
+                Status  = x.IsActive ? "Active" : "Inactive"
             })
             .ToList();
 
         dgv.DataSource = pageData;
 
-        if (dgv.Columns["Id"]      != null) dgv.Columns["Id"].Visible = false;
-        if (dgv.Columns["Company"] is { } cCompany) cCompany.Width = 180;
-        if (dgv.Columns["Contact"] is { } cContact) cContact.Width = 150;
-        if (dgv.Columns["Phone"]   is { } cPhone)   cPhone.Width   = 120;
-        if (dgv.Columns["Email"]   is { } cEmail)   cEmail.Width   = 180;
-        if (dgv.Columns["Status"]  is { } cSt)      cSt.Width      = 80;
-        if (dgv.Columns["Address"] is { } cAddr)    cAddr.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+        if (dgv.Columns["Id"]       != null) dgv.Columns["Id"].Visible = false;
+        if (dgv.Columns["Username"] is { } cUsr) cUsr.Width = 140;
+        if (dgv.Columns["Name"]     is { } cName) cName.Width = 180;
+        if (dgv.Columns["Email"]    is { } cEmail) cEmail.Width = 180;
+        if (dgv.Columns["Role"]     is { } cRole) cRole.Width = 120;
+        if (dgv.Columns["Status"]   is { } cSt)    cSt.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
 
         if (!dgv.Columns.Contains("ColAction"))
         {
@@ -269,12 +272,12 @@ public class SupplierForm : Form
 
     private void BtnAdd_Click(object? s, EventArgs e)
     {
-        using var dlg = new SupplierDialog();
+        using var dlg = new UserDialog();
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
         try { DataStore.Insert(dlg.Result); }
         catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
-        VetMS.Forms.Toast.Success("Supplier successfully saved!");
+        VetMS.Forms.Toast.Success("User successfully saved!");
         LoadData();
     }
 
@@ -284,19 +287,19 @@ public class SupplierForm : Form
         var item = _data.FirstOrDefault(x => x.Id == id);
         if (item is null) return;
 
-        using var dlg = new SupplierDialog(item);
+        using var dlg = new UserDialog(item);
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
-        item.CompanyName   = dlg.Result.CompanyName;
-        item.ContactPerson = dlg.Result.ContactPerson;
-        item.Phone         = dlg.Result.Phone;
-        item.Email         = dlg.Result.Email;
-        item.Address       = dlg.Result.Address;
-        item.IsActive      = dlg.Result.IsActive;
+        item.Username = dlg.Result.Username;
+        item.FullName = dlg.Result.FullName;
+        item.Email    = dlg.Result.Email;
+        item.Role     = dlg.Result.Role;
+        item.IsActive = dlg.Result.IsActive;
+        item.PasswordHash = dlg.Result.PasswordHash;
 
         try { DataStore.Update(item); }
         catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
-        VetMS.Forms.Toast.Success("Supplier successfully updated!");
+        VetMS.Forms.Toast.Success("User successfully updated!");
         LoadData();
     }
 
@@ -306,59 +309,61 @@ public class SupplierForm : Form
         var item = _data.FirstOrDefault(x => x.Id == id);
         if (item is null) return;
 
-        if (VetMS.Forms.CustomMessageBox.Show($"Delete supplier \"{item.CompanyName}\"?", "Confirm Delete",
+        if (VetMS.Forms.CustomMessageBox.Show($"Delete user \"{item.Username}\"?\nThis action cannot be undone.", "Confirm Delete",
             MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
 
         try { DataStore.Delete(item); }
         catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
-        VetMS.Forms.Toast.Success("Supplier successfully deleted!");
+        VetMS.Forms.Toast.Success("User successfully deleted!");
         LoadData();
     }
 }
 
-// ── Supplier dialog ───────────────────────────────────────────────────────────
-public class SupplierDialog : Form
+// ── User Dialog ───────────────────────────────────────────────────────────────
+public class UserDialog : Form
 {
-    private readonly TextBox txtCompany, txtContact, txtPhone, txtEmail, txtAddress;
+    private readonly TextBox txtUsername, txtName, txtEmail, txtPass;
+    private readonly ComboBox cbRole;
     private readonly CheckBox chkActive;
-    public Supplier Result { get; private set; } = new();
+    public User Result { get; private set; } = new();
+    private bool isEditing;
 
-    public SupplierDialog(Supplier? existing = null)
+    public UserDialog(User? existing = null)
     {
-        Text = existing is null ? "Add Supplier" : "Edit Supplier";
-        Size = new Size(460, 500);
+        isEditing = existing is not null;
+        Text = isEditing ? "Edit User" : "Add Result";
+        Size = new Size(500, 600);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false;
         BackColor = Color.White;
 
-        var flow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(20, 14, 20, 0), AutoScroll = true };
+        var flow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, Padding = new Padding(20, 14, 20, 0), AutoScroll = true };
 
-        flow.Controls.Add(UIHelper.CreateFormLabel("Company Name *"));
-        txtCompany = UIHelper.CreateTextBox(390);
-        flow.Controls.Add(txtCompany);
+        flow.Controls.Add(UIHelper.CreateFormLabel("Username *"));
+        txtUsername = UIHelper.CreateTextBox(330);
+        flow.Controls.Add(txtUsername);
 
-        flow.Controls.Add(UIHelper.CreateFormLabel("Contact Person"));
-        txtContact = UIHelper.CreateTextBox(390);
-        flow.Controls.Add(txtContact);
+        flow.Controls.Add(UIHelper.CreateFormLabel("Full Name *"));
+        txtName = UIHelper.CreateTextBox(330);
+        flow.Controls.Add(txtName);
 
-        var pnlRow = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Margin = new Padding(0) };
-        var colPhone = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown, Margin = new Padding(0, 0, 14, 0) };
-        colPhone.Controls.Add(UIHelper.CreateFormLabel("Phone"));
-        txtPhone = UIHelper.CreateTextBox(180);
-        colPhone.Controls.Add(txtPhone);
-        var colEmail = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown };
-        colEmail.Controls.Add(UIHelper.CreateFormLabel("Email"));
-        txtEmail = UIHelper.CreateTextBox(196);
-        colEmail.Controls.Add(txtEmail);
-        pnlRow.Controls.AddRange(new Control[] { colPhone, colEmail });
-        flow.Controls.Add(pnlRow);
+        flow.Controls.Add(UIHelper.CreateFormLabel("Email"));
+        txtEmail = UIHelper.CreateTextBox(330);
+        flow.Controls.Add(txtEmail);
 
-        flow.Controls.Add(UIHelper.CreateFormLabel("Address"));
-        txtAddress = new TextBox { Width = 390, Height = 56, Multiline = true, Font = new Font("Segoe UI", 9.5f), ScrollBars = ScrollBars.Vertical, Margin = new Padding(0, 0, 0, 6) };
-        flow.Controls.Add(txtAddress);
+        flow.Controls.Add(UIHelper.CreateFormLabel("Role *"));
+        cbRole = new ComboBox { Width = 330, Font = new Font("Segoe UI", 9.5f), DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(0, 0, 0, 6) };
+        cbRole.Items.AddRange(["Administrator", "Veterinarian", "Staff"]);
+        cbRole.SelectedIndex = 2; // Default to staff
+        flow.Controls.Add(cbRole);
 
-        chkActive = new CheckBox { Text = "Active", Checked = true, Font = new Font("Segoe UI", 9f) };
+        flow.Controls.Add(UIHelper.CreateFormLabel(isEditing ? "Reset Password (leave blank to keep current)" : "Password *"));
+        txtPass = UIHelper.CreateTextBox(330);
+        txtPass.PasswordChar = '•';
+        flow.Controls.Add(txtPass);
+
+        chkActive = new CheckBox { Text = "Active Account", Checked = true, Font = new Font("Segoe UI", 9f), Margin = new Padding(0, 10, 0, 0) };
         flow.Controls.Add(chkActive);
 
         var pnlBtn = new Panel { Dock = DockStyle.Bottom, Height = 50, BackColor = UIHelper.LightBg };
@@ -379,11 +384,10 @@ public class SupplierDialog : Form
 
         if (existing is not null)
         {
-            txtCompany.Text   = existing.CompanyName;
-            txtContact.Text   = existing.ContactPerson;
-            txtPhone.Text     = existing.Phone;
+            txtUsername.Text  = existing.Username;
+            txtName.Text      = existing.FullName;
             txtEmail.Text     = existing.Email;
-            txtAddress.Text   = existing.Address;
+            cbRole.SelectedItem = existing.Role;
             chkActive.Checked = existing.IsActive;
             Result.Id         = existing.Id;
         }
@@ -391,17 +395,20 @@ public class SupplierDialog : Form
 
     private void BtnSave_Click(object? s, EventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(txtCompany.Text))
-        { VetMS.Forms.CustomMessageBox.Show("Company name is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); txtCompany.Focus(); return; }
+        if (string.IsNullOrWhiteSpace(txtUsername.Text) || string.IsNullOrWhiteSpace(txtName.Text))
+        { VetMS.Forms.CustomMessageBox.Show("Username and Full Name are required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
 
-        Result = new Supplier
+        if (!isEditing && string.IsNullOrWhiteSpace(txtPass.Text))
+        { VetMS.Forms.CustomMessageBox.Show("Password is required for new users.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+
+        Result = new User
         {
             Id            = Result.Id,
-            CompanyName   = txtCompany.Text.Trim(),
-            ContactPerson = txtContact.Text.Trim(),
-            Phone         = txtPhone.Text.Trim(),
+            Username      = txtUsername.Text.Trim(),
+            FullName      = txtName.Text.Trim(),
             Email         = txtEmail.Text.Trim(),
-            Address       = txtAddress.Text.Trim(),
+            Role          = cbRole.SelectedItem?.ToString() ?? "Staff",
+            PasswordHash  = txtPass.Text,
             IsActive      = chkActive.Checked
         };
         DialogResult = DialogResult.OK;

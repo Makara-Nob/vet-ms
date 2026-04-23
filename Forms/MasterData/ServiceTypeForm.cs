@@ -257,7 +257,7 @@ public class ServiceTypeForm : Form
         try { _data = DataStore.GetServiceTypes() ?? []; }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message);
+            VetMS.Forms.CustomMessageBox.Show(ex.Message);
             return;
         }
 
@@ -296,6 +296,7 @@ public class ServiceTypeForm : Form
             lblPage.Text = "Page 1 / 1";
             btnPrev.Enabled = false;
             btnNext.Enabled = false;
+            btnPrev.Visible = btnNext.Visible = lblPage.Visible = false;
             lblNoData.Visible = true;
             dgv.Visible = false;
             return;
@@ -347,6 +348,7 @@ public class ServiceTypeForm : Form
 
         btnPrev.Enabled = _currentPage > 1;
         btnNext.Enabled = _currentPage < totalPages;
+        btnPrev.Visible = btnNext.Visible = lblPage.Visible = totalPages > 1;
     }
 
     private int GetTotalPages()
@@ -362,7 +364,8 @@ public class ServiceTypeForm : Form
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
         try { DataStore.Insert(dlg.Result); }
-        catch (Exception ex) { MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        VetMS.Forms.Toast.Success("Service successfully saved!");
         LoadData();
     }
 
@@ -383,7 +386,8 @@ public class ServiceTypeForm : Form
         item.IsActive    = dlg.Result.IsActive;
 
         try { DataStore.Update(item); }
-        catch (Exception ex) { MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        VetMS.Forms.Toast.Success("Service successfully updated!");
         LoadData();
     }
 
@@ -394,11 +398,12 @@ public class ServiceTypeForm : Form
         var item = _data.FirstOrDefault(x => x.Id == id);
         if (item is null) return;
 
-        if (MessageBox.Show($"Delete service \"{item.Name}\"?", "Confirm Delete",
+        if (VetMS.Forms.CustomMessageBox.Show($"Delete service \"{item.Name}\"?", "Confirm Delete",
             MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
 
         try { DataStore.Delete(item); }
-        catch (Exception ex) { MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        VetMS.Forms.Toast.Success("Service successfully deleted!");
         LoadData();
     }
 
@@ -503,9 +508,9 @@ public class ServiceTypeDialog : Form
     private void BtnSave_Click(object? s, EventArgs e)
     {
         if (string.IsNullOrWhiteSpace(txtName.Text))
-        { MessageBox.Show("Service name is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); txtName.Focus(); return; }
+        { VetMS.Forms.CustomMessageBox.Show("Service name is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); txtName.Focus(); return; }
         if (cboCategory.SelectedItem is null)
-        { MessageBox.Show("Category is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        { VetMS.Forms.CustomMessageBox.Show("Category is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
 
         Result = new ServiceType
         {
