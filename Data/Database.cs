@@ -144,22 +144,12 @@ public static class Database
             ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS created_by VARCHAR(100);
             ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS updated_by VARCHAR(100);
 
-            ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_picture BYTEA;
-            ALTER TABLE pets ADD COLUMN IF NOT EXISTS profile_picture BYTEA;
-
             ALTER TABLE animal_species ADD COLUMN IF NOT EXISTS metadata JSONB;
             ALTER TABLE breeds ADD COLUMN IF NOT EXISTS metadata JSONB;
             ALTER TABLE service_types ADD COLUMN IF NOT EXISTS metadata JSONB;
             ALTER TABLE medications ADD COLUMN IF NOT EXISTS metadata JSONB;
             ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS metadata JSONB;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS metadata JSONB;
-
-            CREATE TABLE IF NOT EXISTS supplier_medications (
-                medication_id INTEGER NOT NULL REFERENCES medications(id) ON DELETE CASCADE,
-                supplier_id   INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
-                created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (medication_id, supplier_id)
-            );
 
             CREATE TABLE IF NOT EXISTS customers (
                 id          SERIAL PRIMARY KEY,
@@ -197,6 +187,16 @@ public static class Database
                 created_by    VARCHAR(100),
                 updated_by    VARCHAR(100),
                 metadata      JSONB
+            );
+
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_picture BYTEA;
+            ALTER TABLE pets ADD COLUMN IF NOT EXISTS profile_picture BYTEA;
+
+            CREATE TABLE IF NOT EXISTS supplier_medications (
+                medication_id INTEGER NOT NULL REFERENCES medications(id) ON DELETE CASCADE,
+                supplier_id   INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+                created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (medication_id, supplier_id)
             );
 
             CREATE TABLE IF NOT EXISTS appointments (

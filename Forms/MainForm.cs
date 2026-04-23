@@ -13,6 +13,8 @@ public class MainForm : Form
     private Form? _currentChild;
 
     private PictureBox _picSidebarUser = null!;
+    private Label _lblSidebarName  = null!;
+    private Label _lblSidebarEmail = null!;
     private Button? _activeNavBtn;
 
     // Design tokens — tweak once, applies everywhere
@@ -160,24 +162,26 @@ public class MainForm : Form
         };
         MakeCircular(_picSidebarUser);
 
-        var lblName = new Label
+        _lblSidebarName = new Label
         {
-            Text      = _currentUser.FullName,
+            Text      = _currentUser.Username,
             ForeColor = Color.White,
             Font      = new Font("Segoe UI", 9.5f, FontStyle.Bold),
             AutoSize  = true,
             Left      = 66, Top = 22,
             Cursor    = Cursors.Hand
         };
-        var lblRole = new Label
+        _lblSidebarEmail = new Label
         {
-            Text      = _currentUser.Role,
+            Text      = _currentUser.Email,
             ForeColor = Color.FromArgb(140, 165, 195),
             Font      = new Font("Segoe UI", 8f),
             AutoSize  = true,
             Left      = 66, Top = 43,
             Cursor    = Cursors.Hand
         };
+        var lblName = _lblSidebarName;
+        var lblRole = _lblSidebarEmail;
 
         pnlCard.Controls.AddRange(new Control[] { _picSidebarUser, lblName, lblRole });
 
@@ -190,7 +194,7 @@ public class MainForm : Form
         });
 
         // Hover + click wiring
-        Action click  = () => LoadForm(new UserProfileForm(_currentUser));
+        Action click  = () => LoadForm(new UserProfileForm(_currentUser, RefreshSidebarProfile));
         Action hover  = () => pnlCard.BackColor = UIHelper.SideHover;
         Action unhover = () => pnlCard.BackColor = Color.FromArgb(18, 255, 255, 255);
 
@@ -399,6 +403,12 @@ public class MainForm : Form
     public void RefreshSidebarProfile()
     {
         if (_picSidebarUser == null) return;
+
+        // Update text labels
+        if (_lblSidebarName  != null) _lblSidebarName.Text  = _currentUser.Username;
+        if (_lblSidebarEmail != null) _lblSidebarEmail.Text = _currentUser.Email;
+
+        // Update avatar
         var old = _picSidebarUser.Image;
         _picSidebarUser.Image = null;
         old?.Dispose();

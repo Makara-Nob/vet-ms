@@ -6,6 +6,7 @@ using VetMS.Forms;
 public class UserProfileForm : Form
 {
     private readonly User _user;
+    private readonly Action? _onSaved;
     private bool _isEditMode;
 
     private PictureBox _picProfile = null!;
@@ -21,9 +22,10 @@ public class UserProfileForm : Form
     private Button _btnSave = null!;
     private Button _btnCancel = null!;
 
-    public UserProfileForm(User user)
+    public UserProfileForm(User user, Action? onSaved = null)
     {
         _user = user;
+        _onSaved = onSaved;
         InitUI();
         SetEditMode(false);
     }
@@ -209,7 +211,7 @@ public class UserProfileForm : Form
         _lblEmail.Text = _user.Email;
 
         SetEditMode(false);
-
+        _onSaved?.Invoke();
         Toast.Success("Profile updated successfully.");
     }
 
@@ -262,7 +264,7 @@ public class UserProfileForm : Form
             _user.ProfilePicture = File.ReadAllBytes(fd.FileName);
             DataStore.Update(_user);
             LoadImage();
-
+            _onSaved?.Invoke();
             Toast.Success("Profile photo updated.");
         }
     }

@@ -4,7 +4,21 @@
       "Bash(dotnet build:*)",
       "Bash(where dotnet:*)",
       "Read(//c/Program Files/dotnet/**)",
-      "Bash(dotnet restore:*)"
+      "Bash(dotnet restore:*)",
+      "Bash(PGPASSWORD=88889999 psql:*)",
+      "Bash(psql --version)",
+      "Bash(PGPASSWORD=88889999 psql -h localhost -U postgres -d vet-ms -c \"SELECT table_name FROM information_schema.tables WHERE table_schema='public';\")",
+      "Read(//tmp/**)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(mkdir -p C:/temp)",
+      "Bash(xxd C:/temp/pg_out.txt)",
+      "Bash(xxd C:/temp/pg_err.txt)",
+      "Bash(PGPASSWORD=88889999 psql -h localhost -U postgres -d vet-ms -t -A -c \"SELECT 'connected' as test;\")",
+      "Bash(echo \"exit=$?\")",
+      "Read(//c/Program Files/PostgreSQL/12/bin/**)",
+      "Read(//c/Program Files/PostgreSQL//**)",
+      "Bash(powershell:*)",
+      "Bash(PGPASSWORD=88889999 /c/Program Files/PostgreSQL/12/pgAdmin 4/runtime/psql.exe:*)"
     ]
   }
 }
