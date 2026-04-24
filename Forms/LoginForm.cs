@@ -91,6 +91,8 @@ public class LoginForm : Form
         var (wrapPass, inPass) = MakeInput("🔒  Password", true,  285);
         txtUsername = inUser;
         txtPassword = inPass;
+        txtUsername.Text = "admin";
+        txtPassword.Text = "admin123";
 
         // ── Button ─────────────────────────────────────────────────────────────
         var btnLogin = new Button

@@ -18,12 +18,13 @@ public class PetForm : Form
     private void InitializeUI()
     {
         Text = "Patients (Pets)"; BackColor = UIHelper.LightBg;
-        var content = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(12) };
-        var grid = new Panel { Dock = DockStyle.Top, Height = 420, BackColor = Color.White };
+        var contentPanel  = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(20, 8, 20, 0) };
+        var gridContainer = new Panel { Dock = DockStyle.Fill, BackColor = Color.White };
         dgv = new DataGridView
         {
             Dock = DockStyle.Fill,
             AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
+            ScrollBars = ScrollBars.Vertical,
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
             MultiSelect = false,
             ReadOnly = true,
@@ -36,45 +37,55 @@ public class PetForm : Form
             Cursor = Cursors.Hand
         };
         UIHelper.StyleGrid(dgv);
-        dgv.CellPainting += (_, e) => UIHelper.PaintDynamicActionColumn(dgv, e, "View", "Edit");
-        dgv.CellMouseClick += (_, e) => UIHelper.HandleDynamicActionColumnClick(dgv, e, ("View", ViewRow), ("Edit", EditRow));
+        dgv.ColumnHeadersHeight = 42;
+        dgv.RowTemplate.Height  = 38;
+        dgv.Resize             += (_, _) => DistributeColumns();
+        dgv.CellPainting   += (_, e) => UIHelper.PaintActionColumn(dgv, e, "View", "Edit");
+        dgv.CellMouseClick += (_, e) => UIHelper.HandleActionColumnClick(dgv, e, ViewRow, EditRow, "View", "Edit");
         dgv.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0 && dgv.Columns[e.ColumnIndex].Name != "ColAction") ViewRow(e.RowIndex); };
+
         var pag = BuildPaginationBar(); pag.Dock = DockStyle.Bottom;
         lblNoData = UIHelper.CreateEmptyDataLabel("No pets registered yet.");
-        grid.Controls.Add(lblNoData); grid.Controls.Add(dgv); grid.Controls.Add(pag);
-        lblNoData.BringToFront(); dgv.BringToFront();
-        content.Controls.Add(grid);
-        Controls.Add(content); Controls.Add(BuildStatusBar()); Controls.Add(BuildSearchBar());
-        Controls.Add(UIHelper.CreateHeader("Patients", "Manage registered pets and patient profiles"));
+
+        gridContainer.Controls.Add(lblNoData);
+        gridContainer.Controls.Add(dgv);
+        gridContainer.Controls.Add(pag);
+        lblNoData.BringToFront();
+
+        contentPanel.Controls.Add(gridContainer);
+        Controls.Add(contentPanel);
+        Controls.Add(BuildStatusBar());
+        Controls.Add(BuildSearchBar());
+        Controls.Add(UIHelper.CreateHeader("Patients", "Manage animal records, owners, and patient profiles"));
     }
 
     private Panel BuildStatusBar()
     {
         var p = new Panel { Dock = DockStyle.Bottom, Height = 28, BackColor = Color.White };
-        lblStatus = new Label { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(12, 0, 0, 0), ForeColor = Color.FromArgb(90, 100, 115), Font = new Font("Segoe UI", 8.5f) };
+        lblStatus = new Label { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(20, 0, 0, 0), ForeColor = Color.FromArgb(90, 100, 115), Font = new Font("Segoe UI", 8.5f) };
         p.Controls.Add(lblStatus); p.Controls.Add(new Panel { Dock = DockStyle.Top, Height = 1, BackColor = Color.FromArgb(230, 232, 235) }); return p;
     }
 
     private Panel BuildSearchBar()
     {
-        var p = new Panel { Dock = DockStyle.Top, Height = 56, Padding = new Padding(0, 10, 0, 10) };
-        var ico = new Label { Text = "🔍", Width = 24, Height = 26, Left = 4, Top = 13, TextAlign = ContentAlignment.MiddleCenter };
-        txtSearch = new TextBox { Left = 28, Top = 13, Width = 300, Font = new Font("Segoe UI", 11f), PlaceholderText = "Search pets by name, owner, species..." };
+        var p = new Panel { Dock = DockStyle.Top, Height = 72 };
+        var ico = new Label { Text = "🔍", Width = 26, Height = 38, Left = 20, Top = 17, TextAlign = ContentAlignment.MiddleCenter };
+        txtSearch = new TextBox { Left = 46, Top = 20, Width = 260, Font = new Font("Segoe UI", 11f), PlaceholderText = "Search pet, owner, species..." };
         txtSearch.TextChanged += (_, _) => FilterData();
-        var btnAdd = UIHelper.CreateButton("Add", UIHelper.Success, 70, 31); btnAdd.Left = txtSearch.Right + 12; btnAdd.Top = 12; btnAdd.Click += BtnAdd_Click;
-        var btnReset = UIHelper.CreateButton("Reset", Color.SlateGray, 70, 31); btnReset.Left = btnAdd.Right + 8; btnReset.Top = 12;
+        var btnAdd   = UIHelper.CreateButton("+ Add",  UIHelper.Success,    90, 38); btnAdd.Left   = txtSearch.Right + 14; btnAdd.Top   = 17; btnAdd.Click += BtnAdd_Click;
+        var btnReset = UIHelper.CreateButton("Reset",  Color.SlateGray,     80, 38); btnReset.Left = btnAdd.Right + 8;     btnReset.Top = 17;
         btnReset.Click += (_, _) => { txtSearch.Clear(); LoadData(); };
         p.Controls.AddRange(new Control[] { ico, txtSearch, btnAdd, btnReset }); return p;
     }
 
     private Panel BuildPaginationBar()
     {
-        var p = new Panel { Height = 48, BackColor = Color.White };
+        var p = new Panel { Height = 60, BackColor = Color.White };
         p.Controls.Add(new Panel { Dock = DockStyle.Top, Height = 1, BackColor = Color.FromArgb(230, 235, 240) });
-        btnPrev = UIHelper.CreateButton("Prev", Color.FromArgb(108, 117, 125), 60, 26);
-        btnNext = UIHelper.CreateButton("Next", Color.FromArgb(108, 117, 125), 60, 26);
-        lblPage = new Label { AutoSize = false, Width = 100, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 9f), ForeColor = Color.FromArgb(64, 64, 64) };
-        p.Resize += (_, _) => { btnNext.Left = p.Width - btnNext.Width - 16; btnNext.Top = 11; lblPage.Left = btnNext.Left - lblPage.Width - 8; lblPage.Top = 15; btnPrev.Left = lblPage.Left - btnPrev.Width - 8; btnPrev.Top = 11; };
+        btnPrev = UIHelper.CreateButton("← Prev", Color.FromArgb(108, 117, 125), 80, 36);
+        btnNext = UIHelper.CreateButton("Next →", Color.FromArgb(108, 117, 125), 80, 36);
+        lblPage = new Label { AutoSize = false, Width = 110, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 9.5f), ForeColor = Color.FromArgb(64, 64, 64) };
+        p.Resize += (_, _) => { btnNext.Left = p.Width - btnNext.Width - 16; btnNext.Top = 12; lblPage.Left = btnNext.Left - lblPage.Width - 10; lblPage.Top = 18; btnPrev.Left = lblPage.Left - btnPrev.Width - 10; btnPrev.Top = 12; };
         btnPrev.Click += (_, _) => { if (_currentPage > 1) { _currentPage--; RefreshGrid(); } };
         btnNext.Click += (_, _) => { if (_currentPage < GetTotalPages()) { _currentPage++; RefreshGrid(); } };
         p.Controls.AddRange(new Control[] { btnPrev, lblPage, btnNext }); return p;
@@ -109,20 +120,38 @@ public class PetForm : Form
         var page = _filtered.Skip((_currentPage - 1) * _pageSize).Take(_pageSize)
             .Select(x => new { x.Id, x.Name, Owner = x.CustomerName, x.SpeciesName, x.BreedName, x.Gender, DOB = x.DateOfBirth?.ToString("yyyy-MM-dd") ?? "-", Status = x.IsActive ? "Active" : "Inactive" }).ToList();
         dgv.DataSource = page;
-        if (dgv.Columns["Id"] != null) dgv.Columns["Id"].Visible = false;
-        if (dgv.Columns["Name"] is { } c1) { c1.HeaderText = "Pet Name"; c1.Width = 140; }
-        if (dgv.Columns["Owner"] is { } c2) { c2.HeaderText = "Owner"; c2.Width = 160; }
-        if (dgv.Columns["SpeciesName"] is { } c3) { c3.HeaderText = "Species"; c3.Width = 100; }
-        if (dgv.Columns["BreedName"] is { } c4) { c4.HeaderText = "Breed"; c4.Width = 120; }
-        if (dgv.Columns["Gender"] is { } c5) c5.Width = 70;
-        if (dgv.Columns["DOB"] is { } c6) { c6.HeaderText = "Date of Birth"; c6.Width = 110; }
-        if (dgv.Columns["Status"] is { } c7) c7.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+        if (dgv.Columns["Id"]         != null) dgv.Columns["Id"].Visible = false;
+        if (dgv.Columns["Name"]       is { } c1) c1.HeaderText = "Patient Name";
+        if (dgv.Columns["Owner"]      is { } c2) c2.HeaderText = "Owner";
+        if (dgv.Columns["SpeciesName"] is { } c3) c3.HeaderText = "Species";
+        if (dgv.Columns["BreedName"]  is { } c4) c4.HeaderText = "Breed";
+        if (dgv.Columns["Gender"]     is { } c5) c5.HeaderText = "Gender";
+        if (dgv.Columns["DOB"]        is { } c6) c6.HeaderText = "Date of Birth";
+        if (dgv.Columns["Status"]     is { } c7) c7.HeaderText = "Status";
         if (!dgv.Columns.Contains("ColAction"))
-            dgv.Columns.Add(new DataGridViewTextBoxColumn { Name = "ColAction", HeaderText = "Action", ReadOnly = true, FillWeight = 20 });
+            dgv.Columns.Add(new DataGridViewTextBoxColumn { Name = "ColAction", HeaderText = "", ReadOnly = true });
+        DistributeColumns();
         int tp = GetTotalPages();
         lblStatus.Text = $"{_filtered.Count} records"; lblPage.Text = $"Page {_currentPage} / {tp}";
         btnPrev.Enabled = _currentPage > 1; btnNext.Enabled = _currentPage < tp;
         btnPrev.Visible = btnNext.Visible = lblPage.Visible = tp > 1;
+    }
+
+    private void DistributeColumns()
+    {
+        if (dgv.Columns.Count == 0) return;
+        const int actionW     = 130;
+        const int totalWeight = 690;
+        int available = dgv.ClientSize.Width - actionW - 2;
+        if (available <= 0) return;
+        if (dgv.Columns["ColAction"]   is { } ca) ca.Width = actionW;
+        if (dgv.Columns["Name"]        is { } c1) c1.Width = available * 140 / totalWeight;
+        if (dgv.Columns["Owner"]       is { } c2) c2.Width = available * 150 / totalWeight;
+        if (dgv.Columns["SpeciesName"] is { } c3) c3.Width = available * 100 / totalWeight;
+        if (dgv.Columns["BreedName"]   is { } c4) c4.Width = available * 120 / totalWeight;
+        if (dgv.Columns["Gender"]      is { } c5) c5.Width = available *  80 / totalWeight;
+        if (dgv.Columns["DOB"]         is { } c6) c6.Width = available * 100 / totalWeight;
+        if (dgv.Columns["Status"]      is { } c7) c7.Width = available * 100 / totalWeight;
     }
 
     private void BtnAdd_Click(object? s, EventArgs e)

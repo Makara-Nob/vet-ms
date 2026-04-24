@@ -13,7 +13,7 @@ public static class DataStore
         var list = new List<AnimalSpecies>();
         using var conn = Database.OpenConnection();
         using var cmd = new NpgsqlCommand(
-            "SELECT id, name, description, is_active, metadata FROM animal_species ORDER BY name", conn);
+            "SELECT id, name, description, is_active, metadata, created_at, updated_at, created_by, updated_by FROM animal_species ORDER BY name", conn);
         using var r = cmd.ExecuteReader();
         while (r.Read())
             list.Add(new AnimalSpecies
@@ -22,7 +22,11 @@ public static class DataStore
                 Name        = r.GetString(1),
                 Description = r.GetString(2),
                 IsActive    = r.GetBoolean(3),
-                Metadata    = r.IsDBNull(4) ? null : r.GetString(4)
+                Metadata    = r.IsDBNull(4) ? null : r.GetString(4),
+                CreatedAt   = r.GetDateTime(5),
+                UpdatedAt   = r.IsDBNull(6) ? null : r.GetDateTime(6),
+                CreatedBy   = r.IsDBNull(7) ? null : r.GetString(7),
+                UpdatedBy   = r.IsDBNull(8) ? null : r.GetString(8)
             });
         return list;
     }
@@ -31,11 +35,12 @@ public static class DataStore
     {
         using var conn = Database.OpenConnection();
         using var cmd = new NpgsqlCommand(
-            "INSERT INTO animal_species (name, description, is_active, metadata) VALUES (@n,@d,@a,@m) RETURNING id", conn);
-        cmd.Parameters.AddWithValue("n", item.Name);
-        cmd.Parameters.AddWithValue("d", item.Description);
-        cmd.Parameters.AddWithValue("a", item.IsActive);
+            "INSERT INTO animal_species (name, description, is_active, metadata, created_by) VALUES (@n,@d,@a,@m,@cb) RETURNING id", conn);
+        cmd.Parameters.AddWithValue("n",  item.Name);
+        cmd.Parameters.AddWithValue("d",  item.Description);
+        cmd.Parameters.AddWithValue("a",  item.IsActive);
         cmd.Parameters.Add(new NpgsqlParameter("m", NpgsqlDbType.Jsonb) { Value = (object?)item.Metadata ?? DBNull.Value });
+        cmd.Parameters.AddWithValue("cb", AppSession.Username);
         item.Id = (int)cmd.ExecuteScalar()!;
     }
 
@@ -43,11 +48,12 @@ public static class DataStore
     {
         using var conn = Database.OpenConnection();
         using var cmd = new NpgsqlCommand(
-            "UPDATE animal_species SET name=@n, description=@d, is_active=@a, metadata=@m WHERE id=@id", conn);
+            "UPDATE animal_species SET name=@n, description=@d, is_active=@a, metadata=@m, updated_by=@ub, updated_at=NOW() WHERE id=@id", conn);
         cmd.Parameters.AddWithValue("n",  item.Name);
         cmd.Parameters.AddWithValue("d",  item.Description);
         cmd.Parameters.AddWithValue("a",  item.IsActive);
         cmd.Parameters.Add(new NpgsqlParameter("m", NpgsqlDbType.Jsonb) { Value = (object?)item.Metadata ?? DBNull.Value });
+        cmd.Parameters.AddWithValue("ub", AppSession.Username);
         cmd.Parameters.AddWithValue("id", item.Id);
         cmd.ExecuteNonQuery();
     }
@@ -68,7 +74,8 @@ public static class DataStore
         using var conn = Database.OpenConnection();
         using var cmd = new NpgsqlCommand(
             """
-            SELECT b.id, b.species_id, s.name, b.name, b.description, b.is_active, b.metadata
+            SELECT b.id, b.species_id, s.name, b.name, b.description, b.is_active, b.metadata,
+                   b.created_at, b.updated_at, b.created_by, b.updated_by
             FROM breeds b
             JOIN animal_species s ON s.id = b.species_id
             ORDER BY b.name
@@ -83,7 +90,11 @@ public static class DataStore
                 Name        = r.GetString(3),
                 Description = r.GetString(4),
                 IsActive    = r.GetBoolean(5),
-                Metadata    = r.IsDBNull(6) ? null : r.GetString(6)
+                Metadata    = r.IsDBNull(6) ? null : r.GetString(6),
+                CreatedAt   = r.GetDateTime(7),
+                UpdatedAt   = r.IsDBNull(8) ? null : r.GetDateTime(8),
+                CreatedBy   = r.IsDBNull(9) ? null : r.GetString(9),
+                UpdatedBy   = r.IsDBNull(10) ? null : r.GetString(10)
             });
         return list;
     }
@@ -92,12 +103,13 @@ public static class DataStore
     {
         using var conn = Database.OpenConnection();
         using var cmd = new NpgsqlCommand(
-            "INSERT INTO breeds (species_id, name, description, is_active, metadata) VALUES (@s,@n,@d,@a,@m) RETURNING id", conn);
-        cmd.Parameters.AddWithValue("s", item.SpeciesId);
-        cmd.Parameters.AddWithValue("n", item.Name);
-        cmd.Parameters.AddWithValue("d", item.Description);
-        cmd.Parameters.AddWithValue("a", item.IsActive);
+            "INSERT INTO breeds (species_id, name, description, is_active, metadata, created_by) VALUES (@s,@n,@d,@a,@m,@cb) RETURNING id", conn);
+        cmd.Parameters.AddWithValue("s",  item.SpeciesId);
+        cmd.Parameters.AddWithValue("n",  item.Name);
+        cmd.Parameters.AddWithValue("d",  item.Description);
+        cmd.Parameters.AddWithValue("a",  item.IsActive);
         cmd.Parameters.Add(new NpgsqlParameter("m", NpgsqlDbType.Jsonb) { Value = (object?)item.Metadata ?? DBNull.Value });
+        cmd.Parameters.AddWithValue("cb", AppSession.Username);
         item.Id = (int)cmd.ExecuteScalar()!;
     }
 
@@ -105,12 +117,13 @@ public static class DataStore
     {
         using var conn = Database.OpenConnection();
         using var cmd = new NpgsqlCommand(
-            "UPDATE breeds SET species_id=@s, name=@n, description=@d, is_active=@a, metadata=@m WHERE id=@id", conn);
+            "UPDATE breeds SET species_id=@s, name=@n, description=@d, is_active=@a, metadata=@m, updated_by=@ub, updated_at=NOW() WHERE id=@id", conn);
         cmd.Parameters.AddWithValue("s",  item.SpeciesId);
         cmd.Parameters.AddWithValue("n",  item.Name);
         cmd.Parameters.AddWithValue("d",  item.Description);
         cmd.Parameters.AddWithValue("a",  item.IsActive);
         cmd.Parameters.Add(new NpgsqlParameter("m", NpgsqlDbType.Jsonb) { Value = (object?)item.Metadata ?? DBNull.Value });
+        cmd.Parameters.AddWithValue("ub", AppSession.Username);
         cmd.Parameters.AddWithValue("id", item.Id);
         cmd.ExecuteNonQuery();
     }
@@ -130,7 +143,7 @@ public static class DataStore
         var list = new List<ServiceType>();
         using var conn = Database.OpenConnection();
         using var cmd = new NpgsqlCommand(
-            "SELECT id, name, category, price, description, is_active, metadata FROM service_types ORDER BY name", conn);
+            "SELECT id, name, category, price, description, is_active, metadata, created_at, updated_at, created_by, updated_by FROM service_types ORDER BY name", conn);
         using var r = cmd.ExecuteReader();
         while (r.Read())
             list.Add(new ServiceType
@@ -141,7 +154,11 @@ public static class DataStore
                 Price       = r.GetDecimal(3),
                 Description = r.GetString(4),
                 IsActive    = r.GetBoolean(5),
-                Metadata    = r.IsDBNull(6) ? null : r.GetString(6)
+                Metadata    = r.IsDBNull(6) ? null : r.GetString(6),
+                CreatedAt   = r.GetDateTime(7),
+                UpdatedAt   = r.IsDBNull(8) ? null : r.GetDateTime(8),
+                CreatedBy   = r.IsDBNull(9) ? null : r.GetString(9),
+                UpdatedBy   = r.IsDBNull(10) ? null : r.GetString(10)
             });
         return list;
     }
@@ -150,13 +167,14 @@ public static class DataStore
     {
         using var conn = Database.OpenConnection();
         using var cmd = new NpgsqlCommand(
-            "INSERT INTO service_types (name, category, price, description, is_active, metadata) VALUES (@n,@c,@p,@d,@a,@m) RETURNING id", conn);
-        cmd.Parameters.AddWithValue("n", item.Name);
-        cmd.Parameters.AddWithValue("c", item.Category);
-        cmd.Parameters.AddWithValue("p", item.Price);
-        cmd.Parameters.AddWithValue("d", item.Description);
-        cmd.Parameters.AddWithValue("a", item.IsActive);
+            "INSERT INTO service_types (name, category, price, description, is_active, metadata, created_by) VALUES (@n,@c,@p,@d,@a,@m,@cb) RETURNING id", conn);
+        cmd.Parameters.AddWithValue("n",  item.Name);
+        cmd.Parameters.AddWithValue("c",  item.Category);
+        cmd.Parameters.AddWithValue("p",  item.Price);
+        cmd.Parameters.AddWithValue("d",  item.Description);
+        cmd.Parameters.AddWithValue("a",  item.IsActive);
         cmd.Parameters.Add(new NpgsqlParameter("m", NpgsqlDbType.Jsonb) { Value = (object?)item.Metadata ?? DBNull.Value });
+        cmd.Parameters.AddWithValue("cb", AppSession.Username);
         item.Id = (int)cmd.ExecuteScalar()!;
     }
 
@@ -164,7 +182,7 @@ public static class DataStore
     {
         using var conn = Database.OpenConnection();
         using var cmd = new NpgsqlCommand(
-            "UPDATE service_types SET name=@n, category=@c, price=@p, description=@d, is_active=@a, metadata=@m WHERE id=@id", conn);
+            "UPDATE service_types SET name=@n, category=@c, price=@p, description=@d, is_active=@a, metadata=@m, updated_by=@ub, updated_at=NOW() WHERE id=@id", conn);
         cmd.Parameters.AddWithValue("n",  item.Name);
         cmd.Parameters.AddWithValue("c",  item.Category);
         cmd.Parameters.AddWithValue("p",  item.Price);

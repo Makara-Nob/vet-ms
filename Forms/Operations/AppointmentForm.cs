@@ -19,7 +19,7 @@ public class AppointmentForm : Form
     private void InitializeUI()
     {
         Text = "Appointments"; BackColor = UIHelper.LightBg;
-        var contentPanel   = new Panel { Dock = DockStyle.Fill, BackColor = Color.White };
+        var contentPanel   = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(20, 8, 20, 0) };
         var gridContainer  = new Panel { Dock = DockStyle.Fill, BackColor = Color.White };
 
         dgv = new DataGridView
@@ -74,15 +74,15 @@ public class AppointmentForm : Form
     private Panel BuildStatusBar()
     {
         var p = new Panel { Dock = DockStyle.Bottom, Height = 28, BackColor = Color.White };
-        lblStatus = new Label { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(12,0,0,0), ForeColor = Color.FromArgb(90,100,115), Font = new Font("Segoe UI", 8.5f) };
+        lblStatus = new Label { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(20,0,0,0), ForeColor = Color.FromArgb(90,100,115), Font = new Font("Segoe UI", 8.5f) };
         p.Controls.Add(lblStatus); p.Controls.Add(new Panel { Dock = DockStyle.Top, Height = 1, BackColor = Color.FromArgb(230,232,235) }); return p;
     }
 
     private Panel BuildSearchBar()
     {
-        var p = new Panel { Dock = DockStyle.Top, Height = 72, Padding = new Padding(0,0,0,0) };
-        var ico = new Label { Text = "🔍", Width = 26, Height = 38, Left = 4, Top = 17, TextAlign = ContentAlignment.MiddleCenter };
-        txtSearch = new TextBox { Left = 30, Top = 20, Width = 240, Font = new Font("Segoe UI", 11f), PlaceholderText = "Search pet, owner, vet..." };
+        var p = new Panel { Dock = DockStyle.Top, Height = 72 };
+        var ico = new Label { Text = "🔍", Width = 26, Height = 38, Left = 20, Top = 17, TextAlign = ContentAlignment.MiddleCenter };
+        txtSearch = new TextBox { Left = 46, Top = 20, Width = 240, Font = new Font("Segoe UI", 11f), PlaceholderText = "Search pet, owner, vet..." };
         txtSearch.TextChanged += (_, _) => FilterData();
 
         cboStatusFilter = new ComboBox { Left = txtSearch.Right + 10, Top = 20, Width = 145, Font = new Font("Segoe UI", 10f), DropDownStyle = ComboBoxStyle.DropDownList };
@@ -160,18 +160,18 @@ public class AppointmentForm : Form
     {
         if (dgv.Columns.Count == 0) return;
 
-        const int actionW     = 110;
+        const int actionW     = 130;
         const int totalWeight = 710;
-        int available = dgv.ClientSize.Width - actionW;
+        int available = dgv.ClientSize.Width - actionW - 2;
         if (available <= 0) return;
 
         if (dgv.Columns["ColAction"] is { } ca) ca.Width = actionW;
-        if (dgv.Columns["Date"]    is { } c1) c1.Width = Math.Max(148, available * 130 / totalWeight);
-        if (dgv.Columns["PetName"] is { } c2) c2.Width = Math.Max(100, available * 120 / totalWeight);
-        if (dgv.Columns["Owner"]   is { } c3) c3.Width = Math.Max(100, available * 130 / totalWeight);
-        if (dgv.Columns["Vet"]     is { } c4) c4.Width = Math.Max(100, available * 130 / totalWeight);
-        if (dgv.Columns["Service"] is { } c5) c5.Width = Math.Max(100, available * 120 / totalWeight);
-        if (dgv.Columns["Status"]  is { } c6) c6.Width = Math.Max( 90, available *  80 / totalWeight);
+        if (dgv.Columns["Date"]    is { } c1) c1.Width = available * 130 / totalWeight;
+        if (dgv.Columns["PetName"] is { } c2) c2.Width = available * 120 / totalWeight;
+        if (dgv.Columns["Owner"]   is { } c3) c3.Width = available * 130 / totalWeight;
+        if (dgv.Columns["Vet"]     is { } c4) c4.Width = available * 130 / totalWeight;
+        if (dgv.Columns["Service"] is { } c5) c5.Width = available * 120 / totalWeight;
+        if (dgv.Columns["Status"]  is { } c6) c6.Width = available *  80 / totalWeight;
     }
 
     private void BtnAdd_Click(object? s, EventArgs e)
@@ -269,12 +269,12 @@ public class AppointmentDialog : Form
         cboPet.SelectedIndexChanged += (_, _) => UpdateHeaderSubtext();
 
         cboVet = new ComboBox { Width = CboW, Font = new Font("Segoe UI", 10.5f), DropDownStyle = ComboBoxStyle.DropDownList };
-        var vetList = new List<object> { new User { Id = 0, FullName = "(Not assigned)" } };
-        vetList.AddRange(_vets.Cast<object>()); cboVet.DataSource = vetList; cboVet.DisplayMember = "FullName"; cboVet.ValueMember = "Id";
+        var vetList = new List<User> { new User { Id = 0, FullName = "(Not assigned)" } };
+        vetList.AddRange(_vets); cboVet.DataSource = vetList; cboVet.DisplayMember = "FullName"; cboVet.ValueMember = "Id";
 
         cboService = new ComboBox { Width = CboW, Font = new Font("Segoe UI", 10.5f), DropDownStyle = ComboBoxStyle.DropDownList };
-        var svcList = new List<object> { new ServiceType { Id = 0, Name = "(Not specified)" } };
-        svcList.AddRange(_services.Cast<object>()); cboService.DataSource = svcList; cboService.DisplayMember = "Name"; cboService.ValueMember = "Id";
+        var svcList = new List<ServiceType> { new ServiceType { Id = 0, Name = "(Not specified)" } };
+        svcList.AddRange(_services); cboService.DataSource = svcList; cboService.DisplayMember = "Name"; cboService.ValueMember = "Id";
 
         cboStatus = new ComboBox { Width = CboW, Font = new Font("Segoe UI", 10.5f), DropDownStyle = ComboBoxStyle.DropDownList };
         cboStatus.Items.AddRange(["Scheduled", "In Progress", "Completed", "Cancelled"]); cboStatus.SelectedIndex = 0;
@@ -315,10 +315,12 @@ public class AppointmentDialog : Form
         Controls.Add(contentPnl);
 
         var pnlBtn = new Panel { Dock = DockStyle.Bottom, Height = 72, BackColor = Color.White };
-        var btnSave   = UIHelper.CreateButton(_readOnly ? "Done" : "Save", UIHelper.Success,              110, 40);
-        var btnCancel = UIHelper.CreateButton("Cancel",                    Color.FromArgb(108,117,125),   110, 40);
+        var btnSave   = UIHelper.CreateButton(_readOnly ? "Back" : "Save", UIHelper.Success,              110, 40);
+        var btnCancel = UIHelper.CreateButton("Cancel",                   Color.FromArgb(108,117,125),   110, 40);
 
-        btnSave.Top = btnCancel.Top = 16; btnSave.Left = pnlBtn.Width - 238; btnCancel.Left = pnlBtn.Width - 122;
+        btnSave.Top = btnCancel.Top = 16;
+        btnSave.Left = _readOnly ? pnlBtn.Width - 122 : pnlBtn.Width - 238;
+        btnCancel.Left = pnlBtn.Width - 122;
         btnSave.Anchor = btnCancel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         
         btnCancel.Visible = !_readOnly;
@@ -336,8 +338,6 @@ public class AppointmentDialog : Form
         {
             var petItem = cboPet.Items.OfType<PetItem>().FirstOrDefault(pi => pi.Pet.Id == existing.PetId);
             if (petItem != null) cboPet.SelectedItem = petItem;
-            var vet = vetList.OfType<User>().FirstOrDefault(v => v.Id == (existing.AssignedVetId ?? 0)); if (vet != null) cboVet.SelectedItem = vet;
-            var svc = svcList.OfType<ServiceType>().FirstOrDefault(s => s.Id == (existing.ServiceTypeId ?? 0)); if (svc != null) cboService.SelectedItem = svc;
             dtpDate.Value = existing.AppointmentDate.Date;
             dtpTime.Value = DateTime.Today.AddHours(existing.AppointmentDate.Hour).AddMinutes(existing.AppointmentDate.Minute);
             numDuration.Value = existing.Duration;
@@ -351,6 +351,14 @@ public class AppointmentDialog : Form
                 txtNotes.ReadOnly = true;
                 txtNotes.BackColor = Color.White;
             }
+
+            Load += (_, _) =>
+            {
+                var vi = vetList.FindIndex(u => u.Id == (existing.AssignedVetId ?? 0));
+                if (vi >= 0) cboVet.SelectedIndex = vi;
+                var si2 = svcList.FindIndex(s => s.Id == (existing.ServiceTypeId ?? 0));
+                if (si2 >= 0) cboService.SelectedIndex = si2;
+            };
         }
     }
 
@@ -366,12 +374,12 @@ public class AppointmentDialog : Form
         var pet = petItem.Pet;
         var vet = cboVet.SelectedItem as User;
         var svc = cboService.SelectedItem as ServiceType;
-        var dt  = dtpDate.Value.Date + dtpTime.Value.TimeOfDay;
+        var dt  = DateTime.SpecifyKind(dtpDate.Value.Date + dtpTime.Value.TimeOfDay, DateTimeKind.Unspecified);
         Result = new Appointment
         {
             Id = Result.Id, PetId = pet.Id, PetName = pet.Name, CustomerId = pet.CustomerId, CustomerName = pet.CustomerName,
-            AssignedVetId = (vet?.Id ?? 0) == 0 ? null : vet?.Id, VetName = vet?.FullName ?? "",
-            ServiceTypeId = (svc?.Id ?? 0) == 0 ? null : svc?.Id, ServiceTypeName = svc?.Name ?? "",
+            AssignedVetId = (vet?.Id ?? 0) == 0 ? null : vet?.Id, VetName = (vet?.Id ?? 0) == 0 ? "" : vet!.FullName,
+            ServiceTypeId = (svc?.Id ?? 0) == 0 ? null : svc?.Id, ServiceTypeName = (svc?.Id ?? 0) == 0 ? "" : svc!.Name,
             AppointmentDate = dt, Duration = (int)numDuration.Value,
             Status = cboStatus.SelectedItem?.ToString() ?? "Scheduled", Notes = txtNotes.Text.Trim()
         };
