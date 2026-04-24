@@ -268,9 +268,23 @@ public class AppointmentDialog : Form
         cboPet.AutoCompleteSource = AutoCompleteSource.ListItems;
         cboPet.SelectedIndexChanged += (_, _) => UpdateHeaderSubtext();
 
-        cboVet = new ComboBox { Width = CboW, Font = new Font("Segoe UI", 10.5f), DropDownStyle = ComboBoxStyle.DropDownList };
-        var vetList = new List<User> { new User { Id = 0, FullName = "(Not assigned)" } };
-        vetList.AddRange(_vets); cboVet.DataSource = vetList; cboVet.DisplayMember = "FullName"; cboVet.ValueMember = "Id";
+        cboVet = new ComboBox
+        {
+            Width = CboW,
+            Font = new Font("Segoe UI", 10.5f),
+            DropDownStyle = ComboBoxStyle.DropDownList
+        };
+
+        var vetList = new List<User>
+{
+    new User { Id = 0, Username = "(Not assigned)" }
+};
+
+        vetList.AddRange(_vets);
+
+        cboVet.DataSource = vetList;
+        cboVet.DisplayMember = "Username";
+        cboVet.ValueMember = "Id";
 
         cboService = new ComboBox { Width = CboW, Font = new Font("Segoe UI", 10.5f), DropDownStyle = ComboBoxStyle.DropDownList };
         var svcList = new List<ServiceType> { new ServiceType { Id = 0, Name = "(Not specified)" } };

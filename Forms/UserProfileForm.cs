@@ -190,7 +190,7 @@ public class UserProfileForm : Form
         _btnSave.Visible = enable;
         _btnCancel.Visible = enable;
 
-        _btnEdit.Enabled = !enable;
+        _btnEdit.Visible = !enable;
     }
 
     // ───────────────────────── SAVE ─────────────────────────
