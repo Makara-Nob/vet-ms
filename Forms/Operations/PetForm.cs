@@ -167,10 +167,7 @@ public class PetDialog : Form
     private readonly DateTimePicker dtpDOB;
     private readonly CheckBox chkActive, chkNoDOB;
     private readonly PictureBox picAvatar;
-
-    private Label lblSbName = null!, lblSbOwner = null!, lblSbSpecies = null!,
-                  lblSbGender = null!, lblSbWeight = null!, lblSbDob = null!,
-                  lblSbStatus = null!, lblSbMicrochip = null!;
+    private Label lblHdrName = null!, lblHdrSub = null!, lblHdrStatus = null!;
 
     private byte[]? _profilePicture;
     private readonly List<Customer> _customers;
@@ -181,11 +178,8 @@ public class PetDialog : Form
     public PetDialog(Pet? existing = null)
     {
         Text = existing is null ? "Register New Patient" : $"Edit Patient — {existing.Name}";
-        var screen = Screen.FromPoint(MousePosition);
-        int formWidth = Math.Min(980, (int)(screen.WorkingArea.Width * 0.80));
-        int formHeight = Math.Min(900, (int)(screen.WorkingArea.Height * 0.90));
-        Size = new Size(formWidth, formHeight);
-        MinimumSize = new Size(900, 780);
+        Size = new Size(840, 680);
+        MinimumSize = new Size(720, 580);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false;
@@ -195,109 +189,190 @@ public class PetDialog : Form
         _species = DataStore.GetAnimalSpecies().Where(s => s.IsActive || (existing != null && s.Id == existing.SpeciesId)).ToList();
         _allBreeds = DataStore.GetBreeds().Where(b => b.IsActive || (existing != null && b.Id == existing.BreedId)).ToList();
 
-        var masterPanel = new Panel { Dock = DockStyle.Fill };
-
-        var sidebar = new Panel { Width = 300, Dock = DockStyle.Left, BackColor = Color.FromArgb(248, 249, 252), Padding = new Padding(0) };
-        sidebar.Controls.Add(new Panel { Width = 1, Dock = DockStyle.Right, BackColor = Color.FromArgb(220, 222, 228) });
-
-        var sbAvatarPanel = new Panel { Dock = DockStyle.Top, Height = 200, BackColor = UIHelper.Primary };
-        picAvatar = new PictureBox { Width = 110, Height = 110, Left = 95, Top = 30, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(240, 242, 245), Cursor = Cursors.Hand, Image = UIHelper.CreateProfilePlaceholder(110) };
-        var avatarPath = new System.Drawing.Drawing2D.GraphicsPath(); avatarPath.AddEllipse(0, 0, 110, 110); picAvatar.Region = new Region(avatarPath);
+        // ── Header band ──────────────────────────────────────────────────
+        var header = new Panel { Dock = DockStyle.Top, Height = 86, BackColor = UIHelper.Primary };
+        picAvatar = new PictureBox
+        {
+            Width = 62, Height = 62, Left = 20, Top = 12,
+            SizeMode = PictureBoxSizeMode.Zoom, Cursor = Cursors.Hand,
+            BackColor = Color.FromArgb(255, 255, 255, 20),
+            Image = UIHelper.CreateProfilePlaceholder(62)
+        };
+        var ap = new System.Drawing.Drawing2D.GraphicsPath(); ap.AddEllipse(0, 0, 62, 62); picAvatar.Region = new Region(ap);
         UIHelper.AttachImageViewer(picAvatar, () => picAvatar.Image);
+        picAvatar.Click += (_, _) => HandleUpload();
 
-        var lblUpload = new Label { Text = "📷  Change Photo", Left = 0, Top = 158, Width = 300, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 9f, FontStyle.Bold), ForeColor = Color.FromArgb(210, 218, 230), Cursor = Cursors.Hand };
-        lblUpload.Click += (s, e) => HandleUpload();
-        sbAvatarPanel.Controls.AddRange(new Control[] { picAvatar, lblUpload });
-
-        var sbVitals = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(248, 249, 252), Padding = new Padding(22, 18, 22, 18), AutoScroll = true };
-        int sbY = 18, sbX = 22, sbW = 256;
-        void AddVitalRow(string caption, ref Label valueLabel, string initialValue, bool large = false)
+        lblHdrName = new Label
         {
-            sbVitals.Controls.Add(new Label { Text = caption.ToUpperInvariant(), Left = sbX, Top = sbY, Width = sbW, Height = 18, Font = new Font("Segoe UI", 7.5f, FontStyle.Bold), ForeColor = Color.FromArgb(140, 150, 165), AutoSize = false }); sbY += 19;
-            valueLabel = new Label { Text = initialValue, Left = sbX, Top = sbY, Width = sbW, Height = large ? 34 : 28, Font = new Font("Segoe UI", large ? 11.5f : 10f, large ? FontStyle.Bold : FontStyle.Regular), ForeColor = large ? UIHelper.Primary : Color.FromArgb(25, 35, 50), AutoSize = false };
-            sbVitals.Controls.Add(valueLabel); sbY += (large ? 34 : 28) + 18;
-            sbVitals.Controls.Add(new Panel { Left = sbX, Top = sbY - 7, Width = sbW, Height = 1, BackColor = Color.FromArgb(225, 227, 232) });
-        }
-        void AddVitalPairRow(string cap1, ref Label lv1, string val1, string cap2, ref Label lv2, string val2)
+            Text = existing?.Name ?? "New Patient", Left = 96, Top = 12, Width = 620, Height = 28,
+            Font = new Font("Segoe UI", 13f, FontStyle.Bold), ForeColor = Color.White, AutoSize = false
+        };
+        lblHdrSub = new Label
         {
-            int halfW = (sbW - 10) / 2;
-            sbVitals.Controls.Add(new Label { Text = cap1.ToUpperInvariant(), Left = sbX, Top = sbY, Width = halfW, Height = 18, Font = new Font("Segoe UI", 7.5f, FontStyle.Bold), ForeColor = Color.FromArgb(140, 150, 165), AutoSize = false });
-            sbVitals.Controls.Add(new Label { Text = cap2.ToUpperInvariant(), Left = sbX + halfW + 10, Top = sbY, Width = halfW, Height = 18, Font = new Font("Segoe UI", 7.5f, FontStyle.Bold), ForeColor = Color.FromArgb(140, 150, 165), AutoSize = false }); sbY += 19;
-            lv1 = new Label { Text = val1, Left = sbX, Top = sbY, Width = halfW, Height = 28, Font = new Font("Segoe UI", 10f), ForeColor = Color.FromArgb(25, 35, 50), AutoSize = false };
-            lv2 = new Label { Text = val2, Left = sbX + halfW + 10, Top = sbY, Width = halfW, Height = 28, Font = new Font("Segoe UI", 10f), ForeColor = Color.FromArgb(25, 35, 50), AutoSize = false };
-            sbVitals.Controls.Add(lv1); sbVitals.Controls.Add(lv2); sbY += 42;
-            sbVitals.Controls.Add(new Panel { Left = sbX, Top = sbY - 7, Width = sbW, Height = 1, BackColor = Color.FromArgb(225, 227, 232) });
-        }
+            Text = BuildSubText(existing), Left = 96, Top = 40, Width = 620, Height = 20,
+            Font = new Font("Segoe UI", 9f), ForeColor = Color.FromArgb(195, 215, 240), AutoSize = false
+        };
+        lblHdrStatus = new Label
+        {
+            Text = existing is null ? "New Patient" : (existing.IsActive ? "● Active" : "○ Inactive"),
+            Left = 96, Top = 60, Width = 200, Height = 18,
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            ForeColor = (existing?.IsActive == false) ? Color.FromArgb(255, 160, 160) : Color.FromArgb(160, 255, 190),
+            AutoSize = false
+        };
+        var lblCamHint = new Label
+        {
+            Text = "📷 Change Photo", Left = 20, Top = 76, Width = 62, Height = 14,
+            Font = new Font("Segoe UI", 7f), ForeColor = Color.FromArgb(170, 200, 235),
+            TextAlign = ContentAlignment.MiddleCenter, Cursor = Cursors.Hand, AutoSize = false
+        };
+        lblCamHint.Click += (_, _) => HandleUpload();
+        header.Controls.AddRange(new Control[] { picAvatar, lblHdrName, lblHdrSub, lblHdrStatus, lblCamHint });
 
-        AddVitalRow("Patient Name", ref lblSbName, existing?.Name ?? "—", large: true);
-        AddVitalRow("Owner", ref lblSbOwner, existing?.CustomerName ?? "—");
-        AddVitalRow("Species / Breed", ref lblSbSpecies, existing is null ? "—" : $"{existing.SpeciesName} / {existing.BreedName}");
-        AddVitalRow("Date of Birth", ref lblSbDob, existing?.DateOfBirth?.ToString("MMM dd, yyyy") ?? "Unknown");
-        AddVitalPairRow("Gender", ref lblSbGender, existing?.Gender ?? "—", "Weight", ref lblSbWeight, existing is null ? "—" : $"{existing.Weight:F2} kg");
-        AddVitalPairRow("Status", ref lblSbStatus, existing is null ? "New Patient" : (existing.IsActive ? "🟢 Active" : "🔴 Inactive"), "Microchip", ref lblSbMicrochip, string.IsNullOrWhiteSpace(existing?.MicrochipNo) ? "None" : existing.MicrochipNo);
-        sidebar.Controls.Add(sbVitals); sidebar.Controls.Add(sbAvatarPanel);
-
-        var contentArea = new Panel { Dock = DockStyle.Fill, BackColor = Color.White };
-        var profileFlow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(20, 18, 10, 18), AutoScroll = true };
-        // Compute widths to fill the content area: formWidth minus sidebar(300) minus padding(30) minus scrollbar(20)
-        int availW = formWidth - 300 - 50;
-        int ctrlW = availW / 2 - 40;
-        TableLayoutPanel MakeGrid2Col() { var g = new TableLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 2, Margin = new Padding(0, 0, 0, 6) }; g.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, availW / 2)); g.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, availW / 2)); return g; }
-
-        profileFlow.Controls.Add(new Panel { Width = 10, Height = 1, Margin = new Padding(0) });
-        profileFlow.Controls.Add(UIHelper.CreateSectionLabel("IDENTITY & OWNERSHIP"));
-        var gridId = MakeGrid2Col();
-        gridId.Margin = new Padding(0, 0, 0, 20); // Consistent spacing after section
-        cboCustomer = new ComboBox { Width = ctrlW, Font = new Font("Segoe UI", 10.5f), DropDownStyle = ComboBoxStyle.DropDownList, DisplayMember = "FullName", ValueMember = "Id" }; cboCustomer.SelectedIndexChanged += (_, _) => UpdateSidebar();
-        txtName = new TextBox { Width = ctrlW, Font = new Font("Segoe UI", 10.5f) }; txtName.TextChanged += (_, _) => UpdateSidebar();
-        cboSpecies = new ComboBox { Width = ctrlW, Font = new Font("Segoe UI", 10.5f), DropDownStyle = ComboBoxStyle.DropDownList, DisplayMember = "Name", ValueMember = "Id" }; cboSpecies.SelectedIndexChanged += (_, _) => { FilterBreeds(); UpdateSidebar(); };
-        cboBreed = new ComboBox { Width = ctrlW, Font = new Font("Segoe UI", 10.5f), DropDownStyle = ComboBoxStyle.DropDownList }; cboBreed.SelectedIndexChanged += (_, _) => UpdateSidebar();
-        gridId.Controls.Add(UIHelper.WrapControl("Owner / Customer *", cboCustomer), 0, 0); gridId.Controls.Add(UIHelper.WrapControl("Patient Name *", txtName), 1, 0);
-        gridId.Controls.Add(UIHelper.WrapControl("Animal Species *", cboSpecies), 0, 1); gridId.Controls.Add(UIHelper.WrapControl("Breed (Specific)", cboBreed), 1, 1);
-        profileFlow.Controls.Add(gridId);
-
-        profileFlow.Controls.Add(UIHelper.CreateSectionLabel("CLINICAL ATTRIBUTES"));
-        var gridCl = MakeGrid2Col();
-        gridCl.Margin = new Padding(0, 0, 0, 20); // Consistent spacing after section
-        cboGender = new ComboBox { Width = ctrlW, Font = new Font("Segoe UI", 10.5f), DropDownStyle = ComboBoxStyle.DropDownList }; cboGender.Items.AddRange(["Male", "Female", "Unknown"]); cboGender.SelectedIndex = 2; cboGender.SelectedIndexChanged += (_, _) => UpdateSidebar();
-        numWeight = new NumericUpDown { Width = ctrlW, DecimalPlaces = 2, Maximum = 999, Font = new Font("Segoe UI", 10.5f) }; numWeight.ValueChanged += (_, _) => UpdateSidebar();
-        txtColor = new TextBox { Width = ctrlW, Font = new Font("Segoe UI", 10.5f) };
-        txtMicrochip = new TextBox { Width = ctrlW, Font = new Font("Segoe UI", 10.5f) }; txtMicrochip.TextChanged += (_, _) => UpdateSidebar();
-        gridCl.Controls.Add(UIHelper.WrapControl("Gender", cboGender), 0, 0); gridCl.Controls.Add(UIHelper.WrapControl("Weight (kg)", numWeight), 1, 0);
-        gridCl.Controls.Add(UIHelper.WrapControl("Primary Color / Mix", txtColor), 0, 1); gridCl.Controls.Add(UIHelper.WrapControl("Microchip Number", txtMicrochip), 1, 1);
-        profileFlow.Controls.Add(gridCl);
-
-        profileFlow.Controls.Add(UIHelper.CreateSectionLabel("LIFECYCLE"));
-        var gridLc = MakeGrid2Col();
-        gridLc.Margin = new Padding(0, 0, 0, 20); // Consistent spacing after section
-        dtpDOB = new DateTimePicker { Width = 200, Font = new Font("Segoe UI", 10.5f), Format = DateTimePickerFormat.Short, Value = DateTime.Today }; dtpDOB.ValueChanged += (_, _) => UpdateSidebar();
-        chkNoDOB = new CheckBox { Text = "Unknown DOB", Font = new Font("Segoe UI", 9.5f), Width = 110, AutoSize = false, Height = 22, Margin = new Padding(10, 5, 0, 0) }; chkNoDOB.CheckedChanged += (_, _) => { dtpDOB.Enabled = !chkNoDOB.Checked; UpdateSidebar(); };
-        var pnlDob = new FlowLayoutPanel { Width = ctrlW, Height = 30, FlowDirection = FlowDirection.LeftToRight }; pnlDob.Controls.AddRange(new Control[] { dtpDOB, chkNoDOB });
-        chkActive = new CheckBox { Text = "Active Patient", Checked = true, Font = new Font("Segoe UI", 10.5f), AutoSize = true }; chkActive.CheckedChanged += (_, _) => UpdateSidebar();
-        var pnlActive = new Panel { Width = ctrlW, Height = 40, Padding = new Padding(4, 0, 0, 0) }; pnlActive.Controls.Add(chkActive); chkActive.Location = new Point(5, 5);
-        gridLc.Controls.Add(UIHelper.WrapControl("Date of Birth", pnlDob), 0, 0); gridLc.Controls.Add(UIHelper.WrapControl("Patient Status", pnlActive), 1, 0);
-        profileFlow.Controls.Add(gridLc);
-
-        profileFlow.Controls.Add(UIHelper.CreateSectionLabel("CLINICAL NOTES"));
-        txtNotes = new TextBox { Width = availW, Height = 110, Multiline = true, Font = new Font("Segoe UI", 10f), ScrollBars = ScrollBars.Vertical, Margin = new Padding(0, 0, 0, 20) };
-        profileFlow.Controls.Add(txtNotes);
-        profileFlow.Controls.Add(new Panel { Width = 640, Height = 80, Margin = new Padding(0) }); // Increased bottom spacer to accommodate button panel
-
-        contentArea.Controls.Add(profileFlow);
-        masterPanel.Controls.Add(contentArea); masterPanel.Controls.Add(sidebar);
-
-        var pnlBtn = new Panel { Dock = DockStyle.Bottom, Height = 58, BackColor = Color.White };
+        // ── Footer ───────────────────────────────────────────────────────
+        var pnlBtn = new Panel { Dock = DockStyle.Bottom, Height = 56, BackColor = Color.White };
         pnlBtn.Controls.Add(new Panel { Dock = DockStyle.Top, Height = 1, BackColor = Color.FromArgb(225, 228, 235) });
-        var btnSave = UIHelper.CreateButton("  Save  ", UIHelper.Success, 110);
-        var btnCancel = UIHelper.CreateButton("  Cancel  ", Color.FromArgb(108, 117, 125), 110);
-        btnSave.Top = btnCancel.Top = 11; btnSave.Left = pnlBtn.Width - 240; btnCancel.Left = pnlBtn.Width - 122;
+        var btnSave = UIHelper.CreateButton("Save Patient", UIHelper.Success, 120);
+        var btnCancel = UIHelper.CreateButton("Cancel", Color.FromArgb(108, 117, 125), 100);
+        btnSave.Top = btnCancel.Top = 11;
         btnSave.Anchor = btnCancel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        pnlBtn.Resize += (_, _) => { btnSave.Left = pnlBtn.Width - 132; btnCancel.Left = btnSave.Left - 108; };
         btnSave.Click += Save; btnCancel.DialogResult = DialogResult.Cancel;
         pnlBtn.Controls.AddRange(new Control[] { btnSave, btnCancel });
-        Controls.Add(pnlBtn); Controls.Add(masterPanel); AcceptButton = btnSave; CancelButton = btnCancel;
+
+        // ── Scrollable form body (FlowLayoutPanel = predictable top-to-bottom order) ──
+        var body = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown,
+            WrapContents = false, AutoScroll = true,
+            Padding = new Padding(24, 10, 8, 24), BackColor = Color.White
+        };
+
+        // sync widths of grids / labels / notes whenever the panel resizes
+        void SyncWidths()
+        {
+            int w = body.ClientSize.Width - body.Padding.Left - body.Padding.Right;
+            if (w <= 10) return;
+            foreach (Control c in body.Controls)
+                if (c is TableLayoutPanel || c is Label || c is TextBox)
+                    c.Width = w;
+        }
+        body.ClientSizeChanged += (_, _) => SyncWidths();
+
+        // helper: 2-column TableLayoutPanel with 50%/50% columns, explicit height
+        TableLayoutPanel MakeGrid(int rows)
+        {
+            var g = new TableLayoutPanel
+            {
+                Height = rows * 68, ColumnCount = 2, RowCount = rows,
+                Margin = new Padding(0, 0, 0, 4), Padding = new Padding(0)
+            };
+            g.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            g.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            for (int i = 0; i < rows; i++) g.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
+            return g;
+        }
+
+        // helper: cell wrapper — label above control, control fills cell width
+        Panel WrapCell(string caption, Control ctrl, bool rightCol = false, bool stretchCtrl = true)
+        {
+            var p = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 2, rightCol ? 0 : 14, 0) };
+            var lbl = new Label
+            {
+                Text = caption, Top = 0, Left = 0, Height = 20, AutoSize = false,
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), ForeColor = Color.FromArgb(80, 90, 105)
+            };
+            lbl.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top;
+            ctrl.Top = 22; ctrl.Left = 0;
+            ctrl.Anchor = stretchCtrl
+                ? AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top
+                : AnchorStyles.Left | AnchorStyles.Top;
+            p.Controls.AddRange(new Control[] { lbl, ctrl });
+            return p;
+        }
+
+        // helper: section divider label (width synced by SyncWidths)
+        Label MakeSection(string text) => new Label
+        {
+            Text = text, Height = 36, Margin = new Padding(0, 8, 0, 0),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), ForeColor = Color.FromArgb(110, 125, 148),
+            Padding = new Padding(0, 14, 0, 0), AutoSize = false
+        };
+
+        // ── IDENTITY & OWNERSHIP ─────────────────────────────────────────
+        cboCustomer = new ComboBox { Font = new Font("Segoe UI", 10.5f), DropDownStyle = ComboBoxStyle.DropDownList, DisplayMember = "FullName", ValueMember = "Id" };
+        cboCustomer.SelectedIndexChanged += (_, _) => UpdateHeader();
+        txtName = new TextBox { Font = new Font("Segoe UI", 10.5f) };
+        txtName.TextChanged += (_, _) => UpdateHeader();
+        cboSpecies = new ComboBox { Font = new Font("Segoe UI", 10.5f), DropDownStyle = ComboBoxStyle.DropDownList, DisplayMember = "Name", ValueMember = "Id" };
+        cboSpecies.SelectedIndexChanged += (_, _) => { FilterBreeds(); UpdateHeader(); };
+        cboBreed = new ComboBox { Font = new Font("Segoe UI", 10.5f), DropDownStyle = ComboBoxStyle.DropDownList };
+        cboBreed.SelectedIndexChanged += (_, _) => UpdateHeader();
+
+        var gridId = MakeGrid(2);
+        gridId.Controls.Add(WrapCell("Owner / Customer *", cboCustomer), 0, 0);
+        gridId.Controls.Add(WrapCell("Patient Name *", txtName, true), 1, 0);
+        gridId.Controls.Add(WrapCell("Animal Species *", cboSpecies), 0, 1);
+        gridId.Controls.Add(WrapCell("Breed  (leave blank if unknown / mix)", cboBreed, true), 1, 1);
+
+        // ── CLINICAL ATTRIBUTES ──────────────────────────────────────────
+        cboGender = new ComboBox { Font = new Font("Segoe UI", 10.5f), DropDownStyle = ComboBoxStyle.DropDownList };
+        cboGender.Items.AddRange(["Male", "Female", "Unknown"]); cboGender.SelectedIndex = 2;
+        cboGender.SelectedIndexChanged += (_, _) => UpdateHeader();
+        numWeight = new NumericUpDown { DecimalPlaces = 2, Maximum = 999, Font = new Font("Segoe UI", 10.5f) };
+        numWeight.ValueChanged += (_, _) => UpdateHeader();
+        txtColor = new TextBox { Font = new Font("Segoe UI", 10.5f), PlaceholderText = "e.g. Black, white, Tabby..." };
+        txtMicrochip = new TextBox { Font = new Font("Segoe UI", 10.5f), PlaceholderText = "15-digit chip number" };
+        txtMicrochip.TextChanged += (_, _) => UpdateHeader();
+
+        var gridCl = MakeGrid(2);
+        gridCl.Controls.Add(WrapCell("Gender", cboGender), 0, 0);
+        gridCl.Controls.Add(WrapCell("Weight (kg)", numWeight, true), 1, 0);
+        gridCl.Controls.Add(WrapCell("Primary Color / Markings", txtColor), 0, 1);
+        gridCl.Controls.Add(WrapCell("Microchip Number", txtMicrochip, true), 1, 1);
+
+        // ── LIFECYCLE STATUS ─────────────────────────────────────────────
+        dtpDOB = new DateTimePicker { Font = new Font("Segoe UI", 10.5f), Format = DateTimePickerFormat.Short, Value = DateTime.Today };
+        dtpDOB.ValueChanged += (_, _) => UpdateHeader();
+        chkNoDOB = new CheckBox { Text = "Unknown", Font = new Font("Segoe UI", 9.5f), Width = 90, Height = 22 };
+        chkNoDOB.CheckedChanged += (_, _) => { dtpDOB.Enabled = !chkNoDOB.Checked; UpdateHeader(); };
+        var pnlDob = new FlowLayoutPanel { Height = 28, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
+        dtpDOB.Margin = new Padding(0, 0, 10, 0); chkNoDOB.Margin = new Padding(0, 4, 0, 0);
+        pnlDob.Controls.AddRange(new Control[] { dtpDOB, chkNoDOB });
+
+        chkActive = new CheckBox { Text = "Patient is currently active", Checked = true, Font = new Font("Segoe UI", 10f), AutoSize = true };
+        chkActive.CheckedChanged += (_, _) => UpdateHeader();
+        var pnlStatus = new Panel { Height = 28 };
+        chkActive.Top = 4; chkActive.Left = 0; pnlStatus.Controls.Add(chkActive);
+
+        var gridLc = MakeGrid(1);
+        gridLc.Controls.Add(WrapCell("Date of Birth", pnlDob, stretchCtrl: false), 0, 0);
+        gridLc.Controls.Add(WrapCell("Patient Status", pnlStatus, rightCol: true, stretchCtrl: false), 1, 0);
+
+        // ── CLINICAL NOTES ───────────────────────────────────────────────
+        txtNotes = new TextBox
+        {
+            Multiline = true, Height = 96, Margin = new Padding(0, 0, 0, 0),
+            Font = new Font("Segoe UI", 10f), ScrollBars = ScrollBars.Vertical,
+            PlaceholderText = "Allergies, conditions, special instructions..."
+        };
+
+        // add sections top-to-bottom (first added = topmost in FlowLayoutPanel)
+        body.Controls.Add(MakeSection("IDENTITY & OWNERSHIP"));
+        body.Controls.Add(gridId);
+        body.Controls.Add(MakeSection("CLINICAL ATTRIBUTES"));
+        body.Controls.Add(gridCl);
+        body.Controls.Add(MakeSection("LIFECYCLE STATUS"));
+        body.Controls.Add(gridLc);
+        body.Controls.Add(MakeSection("CLINICAL NOTES"));
+        body.Controls.Add(txtNotes);
+
+        Controls.Add(body); Controls.Add(pnlBtn); Controls.Add(header);
+        AcceptButton = btnSave; CancelButton = btnCancel;
 
         this.Load += (s, e) =>
         {
+            SyncWidths();
             cboCustomer.DataSource = _customers;
             cboSpecies.DataSource = _species;
 
@@ -314,27 +389,32 @@ public class PetDialog : Form
                 if (_profilePicture is { Length: > 0 }) { using var ms = new System.IO.MemoryStream(_profilePicture); picAvatar.Image = Image.FromStream(ms); }
                 Result.Id = existing.Id;
             }
-            UpdateSidebar();
-
-            // Force scrollbar back to top and focus first field
-            profileFlow.AutoScrollPosition = new Point(0, 0);
+            UpdateHeader();
+            SyncWidths();
+            body.AutoScrollPosition = new Point(0, 0);
             cboCustomer.Select();
         };
     }
 
-    private void UpdateSidebar()
+    private static string BuildSubText(Pet? p)
     {
-        lblSbName.Text = string.IsNullOrWhiteSpace(txtName.Text) ? "-" : txtName.Text;
-        lblSbOwner.Text = cboCustomer.SelectedItem is Customer c ? c.FullName : "-";
-        var speciesText = cboSpecies.SelectedItem is AnimalSpecies sp ? sp.Name : "-";
-        var breedText = (cboBreed.SelectedItem as Breed)?.Name;
-        if (string.IsNullOrWhiteSpace(breedText) || breedText.Contains("Unknown")) breedText = "Mix / Unknown";
-        lblSbSpecies.Text = $"{speciesText} / {breedText}";
-        lblSbGender.Text = cboGender.SelectedItem?.ToString() ?? "-";
-        lblSbWeight.Text = $"{numWeight.Value:F2} kg";
-        lblSbDob.Text = chkNoDOB.Checked ? "Unknown" : dtpDOB.Value.ToString("MMM dd, yyyy");
-        lblSbMicrochip.Text = string.IsNullOrWhiteSpace(txtMicrochip.Text) ? "None" : txtMicrochip.Text;
-        lblSbStatus.Text = chkActive.Checked ? "🟢 Active" : "🔴 Inactive";
+        if (p is null) return "Owner: —  ·  Species: —";
+        var breed = string.IsNullOrWhiteSpace(p.BreedName) || p.BreedName.Contains("Unknown") ? "Mix" : p.BreedName;
+        return $"Owner: {p.CustomerName}  ·  {p.SpeciesName} / {breed}";
+    }
+
+    private void UpdateHeader()
+    {
+        lblHdrName.Text = string.IsNullOrWhiteSpace(txtName.Text) ? "New Patient" : txtName.Text;
+        var owner = cboCustomer.SelectedItem is Customer c ? c.FullName : "—";
+        var species = cboSpecies.SelectedItem is AnimalSpecies sp ? sp.Name : "—";
+        var breed = (cboBreed.SelectedItem as Breed)?.Name;
+        if (string.IsNullOrWhiteSpace(breed) || breed.Contains("Unknown")) breed = "Mix";
+        var gender = cboGender.SelectedItem?.ToString() ?? "—";
+        var weight = numWeight.Value > 0 ? $"  ·  {numWeight.Value:F1} kg" : "";
+        lblHdrSub.Text = $"Owner: {owner}  ·  {species} / {breed}  ·  {gender}{weight}";
+        lblHdrStatus.Text = chkActive.Checked ? "● Active" : "○ Inactive";
+        lblHdrStatus.ForeColor = chkActive.Checked ? Color.FromArgb(160, 255, 190) : Color.FromArgb(255, 160, 160);
     }
 
     private void HandleUpload()
