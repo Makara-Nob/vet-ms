@@ -20,9 +20,10 @@ public class MainForm : Form
     // Design tokens — tweak once, applies everywhere
     private const int SidebarW     = 248;
     private const int HeaderH      = 56;
-    private const int NavBtnH      = 40;
-    private const int SectionGapT  = 20;   // space above section label
-    private const int SectionGapB  = 4;    // space below section label before first button
+    private const int NavBtnH      = 46;   // taller items for breathing room
+    private const int NavBtnGap    = 2;    // gap between nav buttons
+    private const int SectionGapT  = 28;   // space above section label
+    private const int SectionGapB  = 8;    // space below section label before first button
 
     private readonly Size _baseSize = new(1140, 700);
     private readonly Dictionary<Control, Font> _originalFonts = [];
@@ -208,7 +209,7 @@ public class MainForm : Form
         pnlSidebar.Controls.Add(pnlCard);
         RefreshSidebarProfile();
 
-        _sidebarY = cardH + 8;
+        _sidebarY = cardH + 14;
 
         // ── Nav items ────────────────────────────────────────────────────────────
         AddSection("OPERATIONS");
@@ -367,7 +368,7 @@ public class MainForm : Form
         }
 
         pnlSidebar.Controls.Add(wrap);
-        _sidebarY += NavBtnH;
+        _sidebarY += NavBtnH + NavBtnGap;
     }
 
     private Panel? GetActiveWrap()
