@@ -531,18 +531,19 @@ public class AnimalSpeciesDialog : Form
         };
 
         // ── Body ──────────────────────────────────────────────────────────────
-        var body = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(24, 20, 24, 8) };
-        int y = 0;
+        const int lm = 24; // left margin
+        var body = new Panel { Dock = DockStyle.Fill, BackColor = Color.White };
+        int y = 20;
 
-        body.Controls.Add(FieldLabel("Species Name *", y));  y += 22;
-        txtName = StyledTextBox(y); body.Controls.Add(txtName); y += 42;
+        body.Controls.Add(FieldLabel("Species Name *", lm, y));  y += 22;
+        txtName = StyledTextBox(lm, y); body.Controls.Add(txtName); y += 42;
 
-        body.Controls.Add(FieldLabel("Description", y));     y += 22;
-        txtDesc = StyledTextBox(y, multiline: true); body.Controls.Add(txtDesc); y += 90;
+        body.Controls.Add(FieldLabel("Description", lm, y));     y += 22;
+        txtDesc = StyledTextBox(lm, y, multiline: true); body.Controls.Add(txtDesc); y += 90;
 
         chkActive = new CheckBox
         {
-            Text = "Active", Checked = true, Left = 2, Top = y,
+            Text = "Active", Checked = true, Left = lm, Top = y,
             Font = new Font("Segoe UI", 9.5f), AutoSize = true
         };
         body.Controls.Add(chkActive);
@@ -550,11 +551,11 @@ public class AnimalSpeciesDialog : Form
         if (isEdit)
         {
             y += 36;
-            var sep = new Panel { Left = 0, Top = y, Width = 430, Height = 1, BackColor = Color.FromArgb(225, 230, 240) };
+            var sep = new Panel { Left = lm, Top = y, Width = 430, Height = 1, BackColor = Color.FromArgb(225, 230, 240) };
             body.Controls.Add(sep); y += 14;
 
-            body.Controls.Add(TsLabel("Created At",  existing!.CreatedAt.ToString("MMM dd, yyyy  HH:mm"),  0,  y));
-            body.Controls.Add(TsLabel("Updated At",  existing.UpdatedAt?.ToString("MMM dd, yyyy  HH:mm") ?? "—", 220, y));
+            body.Controls.Add(TsLabel("Created At",  existing!.CreatedAt.ToString("MMM dd, yyyy  HH:mm"),  lm,       y));
+            body.Controls.Add(TsLabel("Updated At",  existing.UpdatedAt?.ToString("MMM dd, yyyy  HH:mm") ?? "—", lm + 220, y));
         }
 
         // ── Footer ────────────────────────────────────────────────────────────
@@ -588,16 +589,16 @@ public class AnimalSpeciesDialog : Form
         if (isEdit) { txtName.Text = existing!.Name; txtDesc.Text = existing.Description; chkActive.Checked = existing.IsActive; }
     }
 
-    private static Label FieldLabel(string text, int y) => new()
+    private static Label FieldLabel(string text, int x, int y) => new()
     {
-        Text = text, Left = 2, Top = y, AutoSize = true,
+        Text = text, Left = x, Top = y, AutoSize = true,
         Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
         ForeColor = Color.FromArgb(60, 75, 95)
     };
 
-    private static TextBox StyledTextBox(int y, bool multiline = false) => new()
+    private static TextBox StyledTextBox(int x, int y, bool multiline = false) => new()
     {
-        Left = 0, Top = y, Width = 432,
+        Left = x, Top = y, Width = 432,
         Height = multiline ? 72 : 28,
         Font = new Font("Segoe UI", 10f),
         Multiline = multiline,
