@@ -423,10 +423,11 @@ public class BreedForm : Form
 // ── Add / Edit Dialog ─────────────────────────────────────────────────────────
 public class BreedDialog : Form
 {
-    private readonly ComboBox  cboSpecies;
-    private readonly TextBox   txtName;
-    private readonly TextBox   txtDesc;
-    private readonly CheckBox  chkActive;
+    private readonly ComboBox   cboSpecies;
+    private readonly TextBox    txtName;
+    private readonly TextBox    txtDesc;
+    private readonly CheckBox?  chkActive;
+    private readonly bool       _existingIsActive = true;
     private readonly List<AnimalSpecies> _species;
 
     public Breed Result { get; private set; } = new();
@@ -435,7 +436,7 @@ public class BreedDialog : Form
     {
         bool isEdit     = existing != null;
         Text            = isEdit ? "Edit Breed" : "Add Breed";
-        Size            = new Size(500, isEdit ? 460 : 400);
+        Size            = new Size(500, isEdit ? 424 : 400);
         StartPosition   = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox     = false; MinimizeBox = false;
@@ -466,8 +467,11 @@ public class BreedDialog : Form
         body.Controls.Add(FieldLabel("Description", lm, y));  y += 22;
         txtDesc = StyledTextBox(lm, y, multiline: true); body.Controls.Add(txtDesc); y += 90;
 
-        chkActive = new CheckBox { Text = "Active", Checked = true, Left = lm, Top = y, Font = new Font("Segoe UI", 9.5f), AutoSize = true };
-        body.Controls.Add(chkActive);
+        if (!isEdit)
+        {
+            chkActive = new CheckBox { Text = "Active", Checked = true, Left = lm, Top = y, Font = new Font("Segoe UI", 9.5f), AutoSize = true };
+            body.Controls.Add(chkActive);
+        }
 
         if (isEdit)
         {
@@ -497,7 +501,8 @@ public class BreedDialog : Form
         {
             var sp = _species.FirstOrDefault(x => x.Id == existing!.SpeciesId);
             if (sp != null) cboSpecies.SelectedItem = sp;
-            txtName.Text = existing!.Name; txtDesc.Text = existing.Description; chkActive.Checked = existing.IsActive;
+            txtName.Text = existing!.Name; txtDesc.Text = existing.Description;
+            _existingIsActive = existing.IsActive;
             Result.Id = existing.Id;
         }
     }
@@ -506,7 +511,7 @@ public class BreedDialog : Form
     {
         if (cboSpecies.SelectedItem is not AnimalSpecies sp) { VetMS.Forms.CustomMessageBox.Show("Please select a species.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         if (string.IsNullOrWhiteSpace(txtName.Text)) { VetMS.Forms.CustomMessageBox.Show("Breed name is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-        Result = new Breed { Id = Result.Id, SpeciesId = sp.Id, SpeciesName = sp.Name, Name = txtName.Text.Trim(), Description = txtDesc.Text.Trim(), IsActive = chkActive.Checked };
+        Result = new Breed { Id = Result.Id, SpeciesId = sp.Id, SpeciesName = sp.Name, Name = txtName.Text.Trim(), Description = txtDesc.Text.Trim(), IsActive = chkActive?.Checked ?? _existingIsActive };
         DialogResult = DialogResult.OK;
     }
 

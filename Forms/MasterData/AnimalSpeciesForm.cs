@@ -494,9 +494,9 @@ public class AnimalSpeciesForm : Form
 // ── Add / Edit Dialog ─────────────────────────────────────────────────────────
 public class AnimalSpeciesDialog : Form
 {
-    private readonly TextBox  txtName;
-    private readonly TextBox  txtDesc;
-    private readonly CheckBox chkActive;
+    private readonly TextBox   txtName;
+    private readonly TextBox   txtDesc;
+    private readonly CheckBox? chkActive;
 
     public AnimalSpecies Result { get; private set; } = new();
 
@@ -504,7 +504,7 @@ public class AnimalSpeciesDialog : Form
     {
         bool isEdit   = existing != null;
         Text          = isEdit ? "Edit Species" : "Add Species";
-        Size          = new Size(500, isEdit ? 420 : 370);
+        Size          = new Size(500, isEdit ? 384 : 370);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; MinimizeBox = false;
@@ -542,12 +542,15 @@ public class AnimalSpeciesDialog : Form
         body.Controls.Add(FieldLabel("Description", lm, y));     y += 22;
         txtDesc = StyledTextBox(lm, y, multiline: true); body.Controls.Add(txtDesc); y += 90;
 
-        chkActive = new CheckBox
+        if (!isEdit)
         {
-            Text = "Active", Checked = true, Left = lm, Top = y,
-            Font = new Font("Segoe UI", 9.5f), AutoSize = true
-        };
-        body.Controls.Add(chkActive);
+            chkActive = new CheckBox
+            {
+                Text = "Active", Checked = true, Left = lm, Top = y,
+                Font = new Font("Segoe UI", 9.5f), AutoSize = true
+            };
+            body.Controls.Add(chkActive);
+        }
 
         if (isEdit)
         {
@@ -572,7 +575,7 @@ public class AnimalSpeciesDialog : Form
         btnSave.Click += (_, _) =>
         {
             if (string.IsNullOrWhiteSpace(txtName.Text)) { VetMS.Forms.CustomMessageBox.Show("Species name is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-            Result = new AnimalSpecies { Id = existing?.Id ?? 0, Name = txtName.Text.Trim(), Description = txtDesc.Text.Trim(), IsActive = chkActive.Checked };
+            Result = new AnimalSpecies { Id = existing?.Id ?? 0, Name = txtName.Text.Trim(), Description = txtDesc.Text.Trim(), IsActive = chkActive?.Checked ?? existing?.IsActive ?? true };
             DialogResult = DialogResult.OK;
         };
         footer.Controls.AddRange(new Control[] { btnSave, btnCancel });
@@ -587,7 +590,7 @@ public class AnimalSpeciesDialog : Form
         Controls.Add(header);
         AcceptButton = btnSave; CancelButton = btnCancel;
 
-        if (isEdit) { txtName.Text = existing!.Name; txtDesc.Text = existing.Description; chkActive.Checked = existing.IsActive; }
+        if (isEdit) { txtName.Text = existing!.Name; txtDesc.Text = existing.Description; }
     }
 
     private static Label FieldLabel(string text, int x, int y) => new()
