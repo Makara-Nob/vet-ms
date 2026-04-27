@@ -478,6 +478,7 @@ public class AnimalSpeciesForm : Form
         int id = (int)dgv.Rows[rowIndex].Cells["Id"].Value;
         var item = _data.FirstOrDefault(x => x.Id == id);
         if (item == null) return;
+        if (VetMS.Forms.CustomMessageBox.Show($"Recover {item.Name}?", "Confirm", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
         item.IsActive = true;
         try { DataStore.Update(item); }
         catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
