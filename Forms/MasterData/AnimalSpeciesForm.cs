@@ -174,7 +174,16 @@ public class AnimalSpeciesForm : Form
         dgv.RowTemplate.Height = 40;
 
         dgv.CellPainting    += DgvCellPainting;
-        dgv.CellMouseClick  += (_, e) => UIHelper.HandleActionColumnClick(dgv, e, EditRow, DeleteRow);
+        dgv.CellMouseClick  += (_, e) =>
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0 || e.Button != MouseButtons.Left) return;
+            if (dgv.Columns[e.ColumnIndex].Name != "ColAction") return;
+            bool isActive = dgv.Rows[e.RowIndex].Cells["Status"]?.Value?.ToString() == "Active";
+            if (isActive)
+                UIHelper.HandleDynamicActionColumnClick(dgv, e, ("Edit", EditRow), ("Delete", DeleteRow));
+            else
+                UIHelper.HandleDynamicActionColumnClick(dgv, e, ("Edit", EditRow), ("Recover", RecoverRow));
+        };
         dgv.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0 && dgv.Columns[e.ColumnIndex].Name != "ColAction") EditRow(e.RowIndex); };
 
         lblNoData = UIHelper.CreateEmptyDataLabel("No species found.");
@@ -311,7 +320,15 @@ public class AnimalSpeciesForm : Form
             return;
         }
 
-        UIHelper.PaintActionColumn(dgv, e);
+        if (e.RowIndex >= 0 && e.ColumnIndex >= 0 && dgv.Columns[e.ColumnIndex].Name == "ColAction")
+        {
+            bool isActive = dgv.Rows[e.RowIndex].Cells["Status"]?.Value?.ToString() == "Active";
+            if (isActive)
+                UIHelper.PaintDynamicActionColumn(dgv, e, "Edit", "Delete");
+            else
+                UIHelper.PaintDynamicActionColumn(dgv, e, "Edit", "Recover");
+            return;
+        }
     }
 
     // ── Data ──────────────────────────────────────────────────────────────────
@@ -452,6 +469,19 @@ public class AnimalSpeciesForm : Form
         try { DataStore.Update(item); }
         catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
         VetMS.Forms.Toast.Success("Species deactivated!");
+        LoadData();
+    }
+
+    private void RecoverRow(int rowIndex)
+    {
+        if (rowIndex < 0 || rowIndex >= dgv.Rows.Count) return;
+        int id = (int)dgv.Rows[rowIndex].Cells["Id"].Value;
+        var item = _data.FirstOrDefault(x => x.Id == id);
+        if (item == null) return;
+        item.IsActive = true;
+        try { DataStore.Update(item); }
+        catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        VetMS.Forms.Toast.Success("Species recovered!");
         LoadData();
     }
 
