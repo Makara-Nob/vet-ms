@@ -187,10 +187,7 @@ public class SupplierForm : Form
             else
                 UIHelper.HandleDynamicActionColumnClick(dgv, e, ("Edit", EditRow), ("Recover", RecoverRow));
         };
-        dgv.CellDoubleClick += (_, e) =>
-        {
-            if (e.RowIndex >= 0 && dgv.Columns[e.ColumnIndex].Name != "ColAction") EditRow(e.RowIndex);
-        };
+        dgv.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0 && dgv.Columns[e.ColumnIndex].Name != "ColAction") EditRow(e.RowIndex); };
 
         lblNoData = UIHelper.CreateEmptyDataLabel("No suppliers found.");
         tableBox.Controls.Add(lblNoData);
@@ -235,10 +232,7 @@ public class SupplierForm : Form
         };
         cboPerPage.Items.AddRange(new object[] { 10, 25, 50, 100 });
         cboPerPage.SelectedIndex = 0;
-        cboPerPage.SelectedIndexChanged += (_, _) =>
-        {
-            _pageSize = (int)cboPerPage.SelectedItem!; _currentPage = 1; RefreshGrid();
-        };
+        cboPerPage.SelectedIndexChanged += (_, _) => { _pageSize = (int)cboPerPage.SelectedItem!; _currentPage = 1; RefreshGrid(); };
 
         lblRppCount = new Label
         {
@@ -319,6 +313,7 @@ public class SupplierForm : Form
                 UIHelper.PaintDynamicActionColumn(dgv, e, "Edit", "Delete");
             else
                 UIHelper.PaintDynamicActionColumn(dgv, e, "Edit", "Recover");
+            return;
         }
     }
 
@@ -333,7 +328,7 @@ public class SupplierForm : Form
     private void FilterData()
     {
         var q = txtSearch.Text.Trim().ToLower();
-        int statusIndex = cboStatus?.SelectedIndex ?? 0; // 0=Active, 1=Inactive, 2=All
+        var statusIndex = cboStatus?.SelectedIndex ?? 0; // 0=Active, 1=Inactive, 2=All
 
         _filtered = _data.Where(x =>
         {
@@ -500,6 +495,7 @@ public class SupplierDialog : Form
     private readonly TextBox txtPhone;
     private readonly TextBox txtEmail;
     private readonly TextBox txtAddress;
+    private readonly CheckBox? chkActive;
     private readonly bool _existingIsActive = true;
 
     public Supplier Result { get; private set; } = new();
@@ -508,7 +504,7 @@ public class SupplierDialog : Form
     {
         bool isEdit = existing != null;
         Text = isEdit ? "Edit Supplier" : "Add Supplier";
-        Size = new Size(500, isEdit ? 610 : 560);
+        Size = new Size(500, isEdit ? 560 : 510);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; MinimizeBox = false;
@@ -523,31 +519,37 @@ public class SupplierDialog : Form
 
         // ── Body ──────────────────────────────────────────────────────────────
         const int lm = 24;
-        int y = 20;
         var body = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, AutoScroll = true };
+        int y = 20;
 
         body.Controls.Add(FieldLabel("Company Name *", lm, y)); y += 22;
-        txtCompany = StyledTextBox(lm, y); body.Controls.Add(txtCompany); y += 44;
+        txtCompany = StyledTextBox(lm, y); body.Controls.Add(txtCompany); y += 42;
 
         body.Controls.Add(FieldLabel("Contact Person", lm, y)); y += 22;
-        txtContact = StyledTextBox(lm, y); body.Controls.Add(txtContact); y += 44;
+        txtContact = StyledTextBox(lm, y); body.Controls.Add(txtContact); y += 42;
 
         body.Controls.Add(FieldLabel("Phone", lm, y)); y += 22;
-        txtPhone = StyledTextBox(lm, y); body.Controls.Add(txtPhone); y += 44;
+        txtPhone = StyledTextBox(lm, y); body.Controls.Add(txtPhone); y += 42;
 
         body.Controls.Add(FieldLabel("Email", lm, y)); y += 22;
-        txtEmail = StyledTextBox(lm, y); body.Controls.Add(txtEmail); y += 44;
+        txtEmail = StyledTextBox(lm, y); body.Controls.Add(txtEmail); y += 42;
 
         body.Controls.Add(FieldLabel("Address", lm, y)); y += 22;
-        txtAddress = StyledTextBox(lm, y, multiline: true); body.Controls.Add(txtAddress); y += 88;
+        txtAddress = StyledTextBox(lm, y, multiline: true); body.Controls.Add(txtAddress); y += 90;
+
+        if (!isEdit)
+        {
+            chkActive = new CheckBox { Text = "Active", Checked = true, Left = lm, Top = y, Font = new Font("Segoe UI", 9.5f), AutoSize = true };
+            body.Controls.Add(chkActive);
+        }
 
         if (isEdit)
         {
             y += 16;
-            body.Controls.Add(new Panel { Left = lm, Top = y, Width = 452, Height = 1, BackColor = Color.FromArgb(225, 230, 240) });
+            body.Controls.Add(new Panel { Left = lm, Top = y, Width = 432, Height = 1, BackColor = Color.FromArgb(225, 230, 240) });
             y += 14;
             body.Controls.Add(TsLabel("Created At", existing!.CreatedAt.ToString("MMM dd, yyyy  HH:mm"), lm, y));
-            body.Controls.Add(TsLabel("Updated At", existing.UpdatedAt?.ToString("MMM dd, yyyy  HH:mm") ?? "—", lm + 230, y));
+            body.Controls.Add(TsLabel("Updated At", existing.UpdatedAt?.ToString("MMM dd, yyyy  HH:mm") ?? "—", lm + 220, y));
         }
 
         // ── Footer ────────────────────────────────────────────────────────────
@@ -590,7 +592,7 @@ public class SupplierDialog : Form
             Phone = txtPhone.Text.Trim(),
             Email = txtEmail.Text.Trim(),
             Address = txtAddress.Text.Trim(),
-            IsActive = _existingIsActive
+            IsActive = chkActive?.Checked ?? _existingIsActive
         };
         DialogResult = DialogResult.OK;
     }
@@ -610,7 +612,7 @@ public class SupplierDialog : Form
     {
         Left = x,
         Top = y,
-        Width = 452,
+        Width = 432,
         Height = multiline ? 72 : 28,
         Font = new Font("Segoe UI", 10f),
         Multiline = multiline,
@@ -621,7 +623,7 @@ public class SupplierDialog : Form
 
     private static Panel TsLabel(string lbl, string val, int x, int y)
     {
-        var p = new Panel { Left = x, Top = y, Width = 220, Height = 40, BackColor = Color.FromArgb(248, 249, 251) };
+        var p = new Panel { Left = x, Top = y, Width = 210, Height = 40, BackColor = Color.FromArgb(248, 249, 251) };
         p.Controls.Add(new Label { Text = lbl, Left = 0, Top = 0, AutoSize = true, Font = new Font("Segoe UI", 7.5f, FontStyle.Bold), ForeColor = Color.FromArgb(130, 140, 155) });
         p.Controls.Add(new Label { Text = val, Left = 0, Top = 16, AutoSize = true, Font = new Font("Segoe UI", 9f), ForeColor = Color.FromArgb(40, 50, 70) });
         return p;
