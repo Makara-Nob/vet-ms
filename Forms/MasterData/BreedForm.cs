@@ -376,10 +376,11 @@ public class BreedForm : Form
         int id = (int)dgv.Rows[rowIndex].Cells["Id"].Value;
         var item = _data.FirstOrDefault(x => x.Id == id);
         if (item == null) return;
-        if (VetMS.Forms.CustomMessageBox.Show($"Delete {item.Name}?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-        try { DataStore.Delete(item); }
+        if (VetMS.Forms.CustomMessageBox.Show($"Deactivate {item.Name}?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        item.IsActive = false;
+        try { DataStore.Update(item); }
         catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
-        VetMS.Forms.Toast.Success("Breed deleted!");
+        VetMS.Forms.Toast.Success("Breed deactivated!");
         LoadData();
     }
 
