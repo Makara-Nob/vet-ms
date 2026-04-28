@@ -123,33 +123,121 @@ public static class UIHelper
         PaintDynamicActionColumn(grid, e, action1, action2);
     }
 
+    private static Color ActionColor(string action) => action switch
+    {
+        "Delete"  => Danger,
+        "View"    => Success,
+        "Recover" => Success,
+        _         => Accent
+    };
+
+    private const int IconSize    = 16;
+    private const int IconBtnSize = 26;
+    private const int IconSpacing = 6;
+
     public static void PaintDynamicActionColumn(DataGridView grid, DataGridViewCellPaintingEventArgs e, params string[] actions)
     {
         if (e.RowIndex < 0 || e.ColumnIndex < 0 || grid.Columns[e.ColumnIndex].Name != "ColAction" || actions.Length == 0) return;
 
         e.PaintBackground(e.CellBounds, true);
-        bool isSelected = (e.State & DataGridViewElementStates.Selected) == DataGridViewElementStates.Selected;
-        using var font = new Font("Segoe UI", 9f, FontStyle.Underline);
 
-        int currentX = e.CellBounds.X + 16;
+        var g = e.Graphics;
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+        int totalW = actions.Length * IconBtnSize + (actions.Length - 1) * IconSpacing;
+        int startX = e.CellBounds.X + (e.CellBounds.Width - totalW) / 2;
+        int cy     = e.CellBounds.Y + e.CellBounds.Height / 2;
 
         foreach (var act in actions)
         {
             if (string.IsNullOrEmpty(act)) continue;
-            
-            var sz = TextRenderer.MeasureText(e.Graphics, act, font);
-            int y = e.CellBounds.Y + (e.CellBounds.Height - sz.Height) / 2;
-            
-            Color c = Accent; // Default Edit
-            if (act == "Delete") c = Danger;
-            else if (act == "View") c = Success;
-            if (isSelected) c = Color.White;
+            var iconColor = ActionColor(act);
+            var btnRect   = new Rectangle(startX, cy - IconBtnSize / 2, IconBtnSize, IconBtnSize);
 
-            TextRenderer.DrawText(e.Graphics, act, font, new Point(currentX, y), c);
-            currentX += sz.Width + 16;
+            // Pill background behind icon
+            using var bgBrush = new SolidBrush(Color.FromArgb(20, iconColor));
+            using var bgPath  = RoundedIconPath(btnRect, 6);
+            g.FillPath(bgBrush, bgPath);
+
+            var iconRect = new Rectangle(startX + (IconBtnSize - IconSize) / 2, cy - IconSize / 2, IconSize, IconSize);
+            DrawActionIcon(g, act, iconRect, iconColor);
+            startX += IconBtnSize + IconSpacing;
         }
 
         e.Handled = true;
+    }
+
+    private static System.Drawing.Drawing2D.GraphicsPath RoundedIconPath(Rectangle rc, int r)
+    {
+        int d = r * 2;
+        var p = new System.Drawing.Drawing2D.GraphicsPath();
+        p.AddArc(rc.Left,      rc.Top,        d, d, 180, 90);
+        p.AddArc(rc.Right - d, rc.Top,        d, d, 270, 90);
+        p.AddArc(rc.Right - d, rc.Bottom - d, d, d,   0, 90);
+        p.AddArc(rc.Left,      rc.Bottom - d, d, d,  90, 90);
+        p.CloseFigure();
+        return p;
+    }
+
+    private static void DrawActionIcon(Graphics g, string action, Rectangle r, Color c)
+    {
+        using var pen   = new Pen(c, 1.5f);
+        using var brush = new SolidBrush(c);
+
+        if (action == "Delete")
+        {
+            // Trash can: lid + body
+            int lx = r.X + 2, ly = r.Y + 3, lw = r.Width - 4;
+            g.DrawLine(pen, lx, ly, lx + lw, ly);                          // lid top
+            g.DrawLine(pen, lx + 3, r.Y + 1, lx + lw - 3, r.Y + 1);      // handle
+            var body = new Rectangle(lx + 1, ly + 2, lw - 2, r.Height - ly - 1 + r.Y);
+            g.DrawRectangle(pen, body);
+            // vertical lines inside body
+            int bx1 = body.X + body.Width / 3, bx2 = body.X + 2 * body.Width / 3;
+            g.DrawLine(pen, bx1, body.Y + 2, bx1, body.Bottom - 2);
+            g.DrawLine(pen, bx2, body.Y + 2, bx2, body.Bottom - 2);
+        }
+        else if (action == "View")
+        {
+            // Eye shape
+            int mx = r.X + r.Width / 2, my = r.Y + r.Height / 2;
+            var eyePath = new System.Drawing.Drawing2D.GraphicsPath();
+            eyePath.AddArc(r.X, my - 5, r.Width, 10, 180, 180);
+            eyePath.AddArc(r.X, my - 5, r.Width, 10, 0, 180);
+            g.DrawPath(pen, eyePath);
+            g.FillEllipse(brush, mx - 3, my - 3, 6, 6);
+        }
+        else if (action == "Recover")
+        {
+            // Circular restore arrow: arc + arrowhead
+            g.DrawArc(pen, r.X + 1, r.Y + 2, r.Width - 2, r.Height - 2, 100, 250);
+            var tip = new PointF[]
+            {
+                new(r.X + r.Width / 2 - 4, r.Y + 1),
+                new(r.X + r.Width / 2 + 1, r.Y + 5),
+                new(r.X + r.Width / 2 + 4, r.Y),
+            };
+            g.FillPolygon(brush, tip);
+        }
+        else
+        {
+            // Pencil: body diagonal + tip + eraser
+            var pts = new PointF[]
+            {
+                new(r.X + 2,        r.Bottom - 3),
+                new(r.X + 2,        r.Bottom - 5),
+                new(r.Right - 4,    r.Y + 3),
+                new(r.Right - 2,    r.Y + 1),
+                new(r.Right,        r.Y + 3),
+                new(r.X + 4,        r.Bottom - 3),
+                new(r.X + 2,        r.Bottom - 3),
+            };
+            g.DrawLines(pen, pts);
+            // eraser cap
+            g.DrawLine(pen, r.Right - 4, r.Y + 1, r.Right - 2, r.Y + 3);
+            // tip dot
+            g.FillEllipse(brush, r.X + 1, r.Bottom - 4, 3, 3);
+        }
     }
 
     public static void HandleActionColumnClick(DataGridView grid, DataGridViewCellMouseEventArgs e, Action<int> onEdit, Action<int>? onDelete = null, string action1 = "Edit", string action2 = "Delete")
@@ -164,22 +252,20 @@ public static class UIHelper
     {
         if (e.RowIndex < 0 || e.ColumnIndex < 0 || e.Button != MouseButtons.Left || grid.Columns[e.ColumnIndex].Name != "ColAction" || actions.Length == 0) return;
 
-        using var font = new Font("Segoe UI", 9f, FontStyle.Underline);
-        int currentX = 16;
+        int colW   = grid.Columns[e.ColumnIndex].Width;
+        int totalW = actions.Length * IconBtnSize + (actions.Length - 1) * IconSpacing;
+        int startX = (colW - totalW) / 2;
 
         foreach (var act in actions)
         {
             if (string.IsNullOrEmpty(act.Name)) continue;
-
-            var sz = TextRenderer.MeasureText(act.Name, font);
-            var rect = new Rectangle(currentX - 6, 0, sz.Width + 12, grid.Rows[e.RowIndex].Height);
-            
+            var rect = new Rectangle(startX, 0, IconBtnSize, grid.Rows[e.RowIndex].Height);
             if (rect.Contains(e.Location))
             {
                 act.Action(e.RowIndex);
                 return;
             }
-            currentX += sz.Width + 16;
+            startX += IconBtnSize + IconSpacing;
         }
     }
 
