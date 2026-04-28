@@ -8,6 +8,8 @@ public class AppointmentForm : Form
     private DataGridView dgv = null!;
     private TextBox txtSearch = null!;
     private ComboBox cboStatusFilter = null!;
+    private DateTimePicker dtpFrom = null!, dtpTo = null!;
+    private CheckBox chkDateFilter = null!;
     private Button btnPrev = null!, btnNext = null!;
     private Label lblPage = null!, lblStatus = null!, lblNoData = null!;
     private List<Appointment> _data = [], _filtered = [];
@@ -80,7 +82,9 @@ public class AppointmentForm : Form
 
     private Panel BuildSearchBar()
     {
-        var p = new Panel { Dock = DockStyle.Top, Height = 72 };
+        var p = new Panel { Dock = DockStyle.Top, Height = 112 };
+
+        // ── Row 1: search + status + action buttons ──────────────────────────
         var ico = new Label { Text = "🔍", Width = 26, Height = 38, Left = 20, Top = 17, TextAlign = ContentAlignment.MiddleCenter };
         txtSearch = new TextBox { Left = 46, Top = 20, Width = 240, Font = new Font("Segoe UI", 11f), PlaceholderText = "Search pet, owner, vet..." };
         txtSearch.TextChanged += (_, _) => FilterData();
@@ -89,10 +93,44 @@ public class AppointmentForm : Form
         cboStatusFilter.Items.AddRange(["Upcoming", "Scheduled", "In Progress", "Completed", "Cancelled", "All Statuses"]);
         cboStatusFilter.SelectedIndex = 0; cboStatusFilter.SelectedIndexChanged += (_, _) => FilterData();
 
-        var btnAdd   = UIHelper.CreateButton("+ Add",  UIHelper.Success,    90, 38); btnAdd.Left   = cboStatusFilter.Right + 14; btnAdd.Top   = 17; btnAdd.Click += BtnAdd_Click;
-        var btnReset = UIHelper.CreateButton("Reset",  Color.SlateGray,     80, 38); btnReset.Left = btnAdd.Right + 8;           btnReset.Top = 17;
-        btnReset.Click += (_, _) => { txtSearch.Clear(); cboStatusFilter.SelectedIndex = 0; LoadData(); };
-        p.Controls.AddRange(new Control[] { ico, txtSearch, cboStatusFilter, btnAdd, btnReset }); return p;
+        var btnAdd   = UIHelper.CreateButton("+ Add", UIHelper.Success,  90, 38); btnAdd.Left   = cboStatusFilter.Right + 14; btnAdd.Top   = 17; btnAdd.Click += BtnAdd_Click;
+        var btnReset = UIHelper.CreateButton("Reset", Color.SlateGray,   80, 38); btnReset.Left = btnAdd.Right + 8;           btnReset.Top = 17;
+        btnReset.Click += (_, _) =>
+        {
+            txtSearch.Clear();
+            cboStatusFilter.SelectedIndex = 0;
+            chkDateFilter.Checked = false;
+            dtpFrom.Value = DateTime.Today;
+            dtpTo.Value   = DateTime.Today;
+            LoadData();
+        };
+
+        // ── Row 2: date range filter ──────────────────────────────────────────
+        const int row2Top = 68;   // top edge for all row-2 controls
+        chkDateFilter = new CheckBox
+        {
+            Text = "Filter by date:", Left = 20, Top = row2Top + 2, Width = 118,
+            Font = new Font("Segoe UI", 9.5f),
+            ForeColor = Color.FromArgb(60, 70, 85), Checked = false
+        };
+        chkDateFilter.CheckedChanged += (_, _) =>
+        {
+            dtpFrom.Enabled = dtpTo.Enabled = chkDateFilter.Checked;
+            FilterData();
+        };
+
+        dtpFrom = new DateTimePicker { Left = 144, Top = row2Top, Width = 120, Font = new Font("Segoe UI", 9.5f), Format = DateTimePickerFormat.Short, Value = DateTime.Today, Enabled = false };
+        dtpFrom.ValueChanged += (_, _) => { if (chkDateFilter.Checked) FilterData(); };
+
+        var lblTo = new Label { Text = "—", Left = 270, Top = row2Top + 2, Width = 16, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 9.5f), ForeColor = Color.Gray };
+
+        dtpTo = new DateTimePicker { Left = 292, Top = row2Top, Width = 120, Font = new Font("Segoe UI", 9.5f), Format = DateTimePickerFormat.Short, Value = DateTime.Today, Enabled = false };
+        dtpTo.ValueChanged += (_, _) => { if (chkDateFilter.Checked) FilterData(); };
+
+        var sep = new Panel { Left = 0, Top = 111, Width = 9999, Height = 1, BackColor = Color.FromArgb(230, 232, 235), Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom };
+
+        p.Controls.AddRange(new Control[] { ico, txtSearch, cboStatusFilter, btnAdd, btnReset, chkDateFilter, dtpFrom, lblTo, dtpTo, sep });
+        return p;
     }
 
     private Panel BuildPaginationBar()
@@ -121,9 +159,13 @@ public class AppointmentForm : Form
     {
         var q = txtSearch.Text.Trim().ToLower();
         var st = cboStatusFilter.SelectedItem?.ToString() ?? "Upcoming";
+        var useDateFilter = chkDateFilter.Checked;
+        var from = dtpFrom.Value.Date;
+        var to   = dtpTo.Value.Date;
         _filtered = _data.Where(x =>
             (st == "All Statuses" || (st == "Upcoming" ? (x.Status == "Scheduled" || x.Status == "In Progress") : x.Status == st)) &&
-            (string.IsNullOrWhiteSpace(q) || (x.PetName?.ToLower().Contains(q) == true) || (x.CustomerName?.ToLower().Contains(q) == true) || (x.VetName?.ToLower().Contains(q) == true))
+            (string.IsNullOrWhiteSpace(q) || (x.PetName?.ToLower().Contains(q) == true) || (x.CustomerName?.ToLower().Contains(q) == true) || (x.VetName?.ToLower().Contains(q) == true)) &&
+            (!useDateFilter || (x.AppointmentDate.Date >= from && x.AppointmentDate.Date <= to))
         ).ToList();
         _currentPage = 1; RefreshGrid();
     }
@@ -138,17 +180,19 @@ public class AppointmentForm : Form
         }
         lblNoData.Visible = false; dgv.Visible = true;
         var page = _filtered.Skip((_currentPage-1)*_pageSize).Take(_pageSize)
-            .Select(x => new { x.Id, Date = x.AppointmentDate.ToString("yyyy-MM-dd HH:mm"), x.PetName, Owner = x.CustomerName, Vet = x.VetName, Service = x.ServiceTypeName, x.Status }).ToList();
+            .Select(x => new { x.Id, Date = x.AppointmentDate.ToString("MMM dd, yyyy HH:mm"), x.PetName, Owner = x.CustomerName, Vet = x.VetName, Service = x.ServiceTypeName, x.Status, CreatedAt = x.CreatedAt.ToString("MMM dd, yyyy") }).ToList();
         dgv.DataSource = page;
-        if (dgv.Columns["Id"] != null) dgv.Columns["Id"].Visible = false;
-        if (dgv.Columns["Date"]    is { } c1) c1.HeaderText = "Date & Time";
-        if (dgv.Columns["PetName"] is { } c2) c2.HeaderText = "Patient (Pet)";
-        if (dgv.Columns["Owner"]   is { } c3) c3.HeaderText = "Owner";
-        if (dgv.Columns["Vet"]     is { } c4) c4.HeaderText = "Assigned Vet";
-        if (dgv.Columns["Service"] is { } c5) c5.HeaderText = "Service";
-        if (dgv.Columns["Status"]  is { } c6) c6.HeaderText = "Status";
+        if (dgv.Columns["Id"]        != null) dgv.Columns["Id"].Visible = false;
+        if (dgv.Columns["Date"]      is { } c1) c1.HeaderText = "Date & Time";
+        if (dgv.Columns["PetName"]   is { } c2) c2.HeaderText = "Patient (Pet)";
+        if (dgv.Columns["Owner"]     is { } c3) c3.HeaderText = "Owner";
+        if (dgv.Columns["Vet"]       is { } c4) c4.HeaderText = "Assigned Vet";
+        if (dgv.Columns["Service"]   is { } c5) c5.HeaderText = "Service";
+        if (dgv.Columns["Status"]    is { } c6) c6.HeaderText = "Status";
+        if (dgv.Columns["CreatedAt"] is { } c7) c7.HeaderText = "Created At";
         if (!dgv.Columns.Contains("ColAction"))
             dgv.Columns.Add(new DataGridViewTextBoxColumn { Name = "ColAction", HeaderText = "", ReadOnly = true });
+        dgv.Columns["ColAction"]!.DisplayIndex = dgv.Columns.Count - 1;
         DistributeColumns();
         int tp = GetTotalPages();
         lblStatus.Text = $"{_filtered.Count} records"; lblPage.Text = $"Page {_currentPage} / {tp}";
@@ -161,17 +205,18 @@ public class AppointmentForm : Form
         if (dgv.Columns.Count == 0) return;
 
         const int actionW     = 130;
-        const int totalWeight = 710;
+        const int totalWeight = 870; // 140+110+120+120+110+80+190
         int available = dgv.ClientSize.Width - actionW - 2;
         if (available <= 0) return;
 
         if (dgv.Columns["ColAction"] is { } ca) ca.Width = actionW;
-        if (dgv.Columns["Date"]    is { } c1) c1.Width = available * 130 / totalWeight;
-        if (dgv.Columns["PetName"] is { } c2) c2.Width = available * 120 / totalWeight;
-        if (dgv.Columns["Owner"]   is { } c3) c3.Width = available * 130 / totalWeight;
-        if (dgv.Columns["Vet"]     is { } c4) c4.Width = available * 130 / totalWeight;
-        if (dgv.Columns["Service"] is { } c5) c5.Width = available * 120 / totalWeight;
-        if (dgv.Columns["Status"]  is { } c6) c6.Width = available *  80 / totalWeight;
+        if (dgv.Columns["Date"]      is { } c1) c1.Width = available * 140 / totalWeight;
+        if (dgv.Columns["PetName"]   is { } c2) c2.Width = available * 110 / totalWeight;
+        if (dgv.Columns["Owner"]     is { } c3) c3.Width = available * 120 / totalWeight;
+        if (dgv.Columns["Vet"]       is { } c4) c4.Width = available * 120 / totalWeight;
+        if (dgv.Columns["Service"]   is { } c5) c5.Width = available * 110 / totalWeight;
+        if (dgv.Columns["Status"]    is { } c6) c6.Width = available *  80 / totalWeight;
+        if (dgv.Columns["CreatedAt"] is { } c7) c7.Width = available * 190 / totalWeight;
     }
 
     private void BtnAdd_Click(object? s, EventArgs e)

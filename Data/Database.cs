@@ -366,7 +366,7 @@ public static class Database
 
         cmd.CommandText = "SELECT COUNT(*) FROM customers";
         long customerCount = (long)cmd.ExecuteScalar()!;
-        if (customerCount > 1000) return;
+        if (customerCount > 0) return; // already has customer data — skip to preserve user changes
 
         cmd.CommandText = "TRUNCATE TABLE customers, pets, appointments, medical_records, medical_record_medications, cbc_records RESTART IDENTITY CASCADE;";
         cmd.ExecuteNonQuery();

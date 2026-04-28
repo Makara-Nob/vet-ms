@@ -7,6 +7,7 @@ public class PetForm : Form
 {
     private DataGridView dgv = null!;
     private TextBox txtSearch = null!;
+    private ComboBox cboStatus = null!;
     private Button btnPrev = null!, btnNext = null!;
     private Label lblPage = null!, lblStatus = null!, lblNoData = null!;
     private List<Pet> _data = [], _filtered = [];
@@ -39,6 +40,7 @@ public class PetForm : Form
         UIHelper.StyleGrid(dgv);
         dgv.ColumnHeadersHeight = 42;
         dgv.RowTemplate.Height  = 38;
+        dgv.ShowCellToolTips    = true;
         dgv.Resize             += (_, _) => DistributeColumns();
         dgv.CellPainting   += (_, e) => UIHelper.PaintActionColumn(dgv, e, "View", "Edit");
         dgv.CellMouseClick += (_, e) => UIHelper.HandleActionColumnClick(dgv, e, ViewRow, EditRow, "View", "Edit");
@@ -70,12 +72,19 @@ public class PetForm : Form
     {
         var p = new Panel { Dock = DockStyle.Top, Height = 72 };
         var ico = new Label { Text = "🔍", Width = 26, Height = 38, Left = 20, Top = 17, TextAlign = ContentAlignment.MiddleCenter };
-        txtSearch = new TextBox { Left = 46, Top = 20, Width = 260, Font = new Font("Segoe UI", 11f), PlaceholderText = "Search pet, owner, species..." };
+        txtSearch = new TextBox { Left = 46, Top = 20, Width = 240, Font = new Font("Segoe UI", 11f), PlaceholderText = "Search pet, owner, species..." };
         txtSearch.TextChanged += (_, _) => FilterData();
-        var btnAdd   = UIHelper.CreateButton("+ Add",  UIHelper.Success,    90, 38); btnAdd.Left   = txtSearch.Right + 14; btnAdd.Top   = 17; btnAdd.Click += BtnAdd_Click;
-        var btnReset = UIHelper.CreateButton("Reset",  Color.SlateGray,     80, 38); btnReset.Left = btnAdd.Right + 8;     btnReset.Top = 17;
-        btnReset.Click += (_, _) => { txtSearch.Clear(); LoadData(); };
-        p.Controls.AddRange(new Control[] { ico, txtSearch, btnAdd, btnReset }); return p;
+
+        cboStatus = new ComboBox { Left = txtSearch.Right + 10, Top = 20, Width = 130, Font = new Font("Segoe UI", 10f), DropDownStyle = ComboBoxStyle.DropDownList };
+        cboStatus.Items.AddRange(["Active Only", "Inactive Only", "All Patients"]);
+        cboStatus.SelectedIndex = 0;
+        cboStatus.SelectedIndexChanged += (_, _) => FilterData();
+
+        var btnAdd   = UIHelper.CreateButton("+ Add", UIHelper.Success, 90, 38); btnAdd.Left   = cboStatus.Right + 14; btnAdd.Top   = 17; btnAdd.Click += BtnAdd_Click;
+        var btnReset = UIHelper.CreateButton("Reset", Color.SlateGray,  80, 38); btnReset.Left = btnAdd.Right + 8;     btnReset.Top = 17;
+        btnReset.Click += (_, _) => { txtSearch.Clear(); cboStatus.SelectedIndex = 0; LoadData(); };
+
+        p.Controls.AddRange(new Control[] { ico, txtSearch, cboStatus, btnAdd, btnReset }); return p;
     }
 
     private Panel BuildPaginationBar()
@@ -102,9 +111,16 @@ public class PetForm : Form
 
     private void FilterData()
     {
-        var q = txtSearch.Text.Trim().ToLower();
-        _filtered = string.IsNullOrWhiteSpace(q) ? _data
-            : _data.Where(x => (x.Name?.ToLower().Contains(q) == true) || (x.CustomerName?.ToLower().Contains(q) == true) || (x.SpeciesName?.ToLower().Contains(q) == true) || (x.BreedName?.ToLower().Contains(q) == true)).ToList();
+        var q  = txtSearch.Text.Trim().ToLower();
+        var st = cboStatus.SelectedIndex; // 0=Active, 1=Inactive, 2=All
+        _filtered = _data.Where(x =>
+            (st == 2 || (st == 0 ? x.IsActive : !x.IsActive)) &&
+            (string.IsNullOrWhiteSpace(q) ||
+             x.Name?.ToLower().Contains(q) == true ||
+             x.CustomerName?.ToLower().Contains(q) == true ||
+             x.SpeciesName?.ToLower().Contains(q) == true ||
+             x.BreedName?.ToLower().Contains(q) == true)
+        ).ToList();
         _currentPage = 1; RefreshGrid();
     }
 
@@ -118,18 +134,28 @@ public class PetForm : Form
         }
         lblNoData.Visible = false; dgv.Visible = true;
         var page = _filtered.Skip((_currentPage - 1) * _pageSize).Take(_pageSize)
-            .Select(x => new { x.Id, x.Name, Owner = x.CustomerName, x.SpeciesName, x.BreedName, x.Gender, DOB = x.DateOfBirth?.ToString("yyyy-MM-dd") ?? "-", Status = x.IsActive ? "Active" : "Inactive" }).ToList();
+            .Select(x => new { x.Id, x.Name, Owner = x.CustomerName, x.SpeciesName, x.BreedName, x.Gender, DOB = x.DateOfBirth?.ToString("MMM dd, yyyy") ?? "-", Status = x.IsActive ? "Active" : "Inactive", CreatedAt = x.CreatedAt.ToString("MMM dd, yyyy") }).ToList();
         dgv.DataSource = page;
-        if (dgv.Columns["Id"]         != null) dgv.Columns["Id"].Visible = false;
-        if (dgv.Columns["Name"]       is { } c1) c1.HeaderText = "Patient Name";
-        if (dgv.Columns["Owner"]      is { } c2) c2.HeaderText = "Owner";
+        if (dgv.Columns["Id"]          != null) dgv.Columns["Id"].Visible = false;
+        if (dgv.Columns["Name"]        is { } c1) c1.HeaderText = "Patient Name";
+        if (dgv.Columns["Owner"]       is { } c2) c2.HeaderText = "Owner";
         if (dgv.Columns["SpeciesName"] is { } c3) c3.HeaderText = "Species";
-        if (dgv.Columns["BreedName"]  is { } c4) c4.HeaderText = "Breed";
-        if (dgv.Columns["Gender"]     is { } c5) c5.HeaderText = "Gender";
-        if (dgv.Columns["DOB"]        is { } c6) c6.HeaderText = "Date of Birth";
-        if (dgv.Columns["Status"]     is { } c7) c7.HeaderText = "Status";
+        if (dgv.Columns["BreedName"]   is { } c4) c4.HeaderText = "Breed";
+        if (dgv.Columns["Gender"]      is { } c5) c5.HeaderText = "Gender";
+        if (dgv.Columns["DOB"]         is { } c6) c6.HeaderText = "Date of Birth";
+        if (dgv.Columns["Status"]      is { } c7) c7.HeaderText = "Status";
+        if (dgv.Columns["CreatedAt"]   is { } c8) c8.HeaderText = "Created At";
         if (!dgv.Columns.Contains("ColAction"))
             dgv.Columns.Add(new DataGridViewTextBoxColumn { Name = "ColAction", HeaderText = "", ReadOnly = true });
+        // Set notes tooltip on every cell in each row
+        var pageData = _filtered.Skip((_currentPage - 1) * _pageSize).Take(_pageSize).ToList();
+        for (int i = 0; i < dgv.Rows.Count && i < pageData.Count; i++)
+        {
+            var notes = pageData[i].Notes?.Trim();
+            if (!string.IsNullOrEmpty(notes))
+                foreach (DataGridViewCell cell in dgv.Rows[i].Cells)
+                    cell.ToolTipText = notes;
+        }
         DistributeColumns();
         int tp = GetTotalPages();
         lblStatus.Text = $"{_filtered.Count} records"; lblPage.Text = $"Page {_currentPage} / {tp}";
@@ -141,17 +167,18 @@ public class PetForm : Form
     {
         if (dgv.Columns.Count == 0) return;
         const int actionW     = 130;
-        const int totalWeight = 690;
+        const int totalWeight = 900; // 130+140+90+110+70+90+90+180
         int available = dgv.ClientSize.Width - actionW - 2;
         if (available <= 0) return;
-        if (dgv.Columns["ColAction"]   is { } ca) ca.Width = actionW;
+        if (dgv.Columns["ColAction"]   is { } ca) { ca.Width = actionW; ca.DisplayIndex = dgv.Columns.Count - 1; }
         if (dgv.Columns["Name"]        is { } c1) c1.Width = available * 140 / totalWeight;
-        if (dgv.Columns["Owner"]       is { } c2) c2.Width = available * 150 / totalWeight;
-        if (dgv.Columns["SpeciesName"] is { } c3) c3.Width = available * 100 / totalWeight;
-        if (dgv.Columns["BreedName"]   is { } c4) c4.Width = available * 120 / totalWeight;
-        if (dgv.Columns["Gender"]      is { } c5) c5.Width = available *  80 / totalWeight;
-        if (dgv.Columns["DOB"]         is { } c6) c6.Width = available * 100 / totalWeight;
-        if (dgv.Columns["Status"]      is { } c7) c7.Width = available * 100 / totalWeight;
+        if (dgv.Columns["Owner"]       is { } c2) c2.Width = available * 130 / totalWeight;
+        if (dgv.Columns["SpeciesName"] is { } c3) c3.Width = available *  90 / totalWeight;
+        if (dgv.Columns["BreedName"]   is { } c4) c4.Width = available * 110 / totalWeight;
+        if (dgv.Columns["Gender"]      is { } c5) c5.Width = available *  70 / totalWeight;
+        if (dgv.Columns["DOB"]         is { } c6) c6.Width = available *  90 / totalWeight;
+        if (dgv.Columns["Status"]      is { } c7) c7.Width = available *  90 / totalWeight;
+        if (dgv.Columns["CreatedAt"]   is { } c8) c8.Width = available * 180 / totalWeight;
     }
 
     private void BtnAdd_Click(object? s, EventArgs e)
@@ -207,8 +234,8 @@ public class PetDialog : Form
     public PetDialog(Pet? existing = null)
     {
         Text = existing is null ? "Register New Patient" : $"Edit Patient — {existing.Name}";
-        Size = new Size(840, 680);
-        MinimumSize = new Size(720, 580);
+        Size = new Size(980, 920);
+        MinimumSize = new Size(900, 820);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false;
@@ -219,10 +246,16 @@ public class PetDialog : Form
         _allBreeds = DataStore.GetBreeds().Where(b => b.IsActive || (existing != null && b.Id == existing.BreedId)).ToList();
 
         // ── Header band ──────────────────────────────────────────────────
-        var header = new Panel { Dock = DockStyle.Top, Height = 86, BackColor = UIHelper.Primary };
+        // Avatar column (90 px) + FlowLayoutPanel fills the rest top-down.
+        // All text labels use AutoSize=true so font metrics at any DPI determine
+        // the height — nothing is ever clipped by a hard-coded pixel value.
+        var header = new Panel { Dock = DockStyle.Top, Height = 120, BackColor = UIHelper.Primary };
+
+        // left column: avatar + "Change Photo" hint
+        var avatarCol = new Panel { Width = 90, Dock = DockStyle.Left, BackColor = UIHelper.Primary };
         picAvatar = new PictureBox
         {
-            Width = 62, Height = 62, Left = 20, Top = 12,
+            Width = 62, Height = 62, Left = 14, Top = 16,
             SizeMode = PictureBoxSizeMode.Zoom, Cursor = Cursors.Hand,
             BackColor = Color.FromArgb(255, 255, 255, 20),
             Image = UIHelper.CreateProfilePlaceholder(62)
@@ -230,33 +263,46 @@ public class PetDialog : Form
         var ap = new System.Drawing.Drawing2D.GraphicsPath(); ap.AddEllipse(0, 0, 62, 62); picAvatar.Region = new Region(ap);
         UIHelper.AttachImageViewer(picAvatar, () => picAvatar.Image);
         picAvatar.Click += (_, _) => HandleUpload();
-
-        lblHdrName = new Label
-        {
-            Text = existing?.Name ?? "New Patient", Left = 96, Top = 12, Width = 620, Height = 28,
-            Font = new Font("Segoe UI", 13f, FontStyle.Bold), ForeColor = Color.White, AutoSize = false
-        };
-        lblHdrSub = new Label
-        {
-            Text = BuildSubText(existing), Left = 96, Top = 40, Width = 620, Height = 20,
-            Font = new Font("Segoe UI", 9f), ForeColor = Color.FromArgb(195, 215, 240), AutoSize = false
-        };
-        lblHdrStatus = new Label
-        {
-            Text = existing is null ? "New Patient" : (existing.IsActive ? "● Active" : "○ Inactive"),
-            Left = 96, Top = 60, Width = 200, Height = 18,
-            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            ForeColor = (existing?.IsActive == false) ? Color.FromArgb(255, 160, 160) : Color.FromArgb(160, 255, 190),
-            AutoSize = false
-        };
         var lblCamHint = new Label
         {
-            Text = "📷 Change Photo", Left = 20, Top = 76, Width = 62, Height = 14,
+            Text = "📷 Change Photo", Left = 14, Top = 82, Width = 62, Height = 16,
             Font = new Font("Segoe UI", 7f), ForeColor = Color.FromArgb(170, 200, 235),
             TextAlign = ContentAlignment.MiddleCenter, Cursor = Cursors.Hand, AutoSize = false
         };
         lblCamHint.Click += (_, _) => HandleUpload();
-        header.Controls.AddRange(new Control[] { picAvatar, lblHdrName, lblHdrSub, lblHdrStatus, lblCamHint });
+        avatarCol.Controls.AddRange(new Control[] { picAvatar, lblCamHint });
+
+        // right column: name / sub-info / status, stacked by FlowLayoutPanel
+        lblHdrName = new Label
+        {
+            Text = existing?.Name ?? "New Patient",
+            Font = new Font("Segoe UI", 13f, FontStyle.Bold), ForeColor = Color.White,
+            AutoSize = true, Margin = new Padding(0, 0, 0, 5)
+        };
+        lblHdrSub = new Label
+        {
+            Text = BuildSubText(existing),
+            Font = new Font("Segoe UI", 9f), ForeColor = Color.FromArgb(195, 215, 240),
+            AutoSize = true, Margin = new Padding(0, 0, 0, 6)
+        };
+        lblHdrStatus = new Label
+        {
+            Text = existing is null ? "Active" : (existing.IsActive ? "Active" : "Inactive"),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            ForeColor = (existing?.IsActive == false) ? Color.FromArgb(255, 160, 160) : Color.FromArgb(160, 255, 190),
+            AutoSize = true, Margin = new Padding(0, 0, 0, 0)
+        };
+        var textFlow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown,
+            BackColor = UIHelper.Primary, WrapContents = false,
+            Padding = new Padding(0, 18, 16, 10)
+        };
+        textFlow.Controls.AddRange(new Control[] { lblHdrName, lblHdrSub, lblHdrStatus });
+
+        // avatarCol docks Left, textFlow fills the rest
+        header.Controls.Add(textFlow);
+        header.Controls.Add(avatarCol);
 
         // ── Footer ───────────────────────────────────────────────────────
         var pnlBtn = new Panel { Dock = DockStyle.Bottom, Height = 56, BackColor = Color.White };
@@ -293,12 +339,12 @@ public class PetDialog : Form
         {
             var g = new TableLayoutPanel
             {
-                Height = rows * 68, ColumnCount = 2, RowCount = rows,
+                Height = rows * 76, ColumnCount = 2, RowCount = rows,
                 Margin = new Padding(0, 0, 0, 4), Padding = new Padding(0)
             };
             g.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             g.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            for (int i = 0; i < rows; i++) g.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
+            for (int i = 0; i < rows; i++) g.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
             return g;
         }
 
@@ -329,14 +375,38 @@ public class PetDialog : Form
         };
 
         // ── IDENTITY & OWNERSHIP ─────────────────────────────────────────
-        cboCustomer = new ComboBox { Font = new Font("Segoe UI", 10.5f), DropDownStyle = ComboBoxStyle.DropDownList, DisplayMember = "FullName", ValueMember = "Id" };
+        cboCustomer = new ComboBox { Font = new Font("Segoe UI", 10.5f), DropDownStyle = ComboBoxStyle.DropDown, DisplayMember = "FullName", ValueMember = "Id", AutoCompleteMode = AutoCompleteMode.SuggestAppend, AutoCompleteSource = AutoCompleteSource.ListItems };
         cboCustomer.SelectedIndexChanged += (_, _) => UpdateHeader();
+        // Commit typed text → SelectedItem when focus leaves (DropDown + AutoComplete doesn't do this automatically)
+        cboCustomer.Leave += (_, _) =>
+        {
+            if (cboCustomer.SelectedItem is Customer) return;
+            var match = _customers.FirstOrDefault(c => string.Equals(c.FullName, cboCustomer.Text.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (match is not null) cboCustomer.SelectedItem = match;
+        };
+
         txtName = new TextBox { Font = new Font("Segoe UI", 10.5f) };
         txtName.TextChanged += (_, _) => UpdateHeader();
-        cboSpecies = new ComboBox { Font = new Font("Segoe UI", 10.5f), DropDownStyle = ComboBoxStyle.DropDownList, DisplayMember = "Name", ValueMember = "Id" };
+
+        cboSpecies = new ComboBox { Font = new Font("Segoe UI", 10.5f), DropDownStyle = ComboBoxStyle.DropDown, DisplayMember = "Name", ValueMember = "Id", AutoCompleteMode = AutoCompleteMode.SuggestAppend, AutoCompleteSource = AutoCompleteSource.ListItems };
         cboSpecies.SelectedIndexChanged += (_, _) => { FilterBreeds(); UpdateHeader(); };
-        cboBreed = new ComboBox { Font = new Font("Segoe UI", 10.5f), DropDownStyle = ComboBoxStyle.DropDownList };
+        cboSpecies.Leave += (_, _) =>
+        {
+            if (cboSpecies.SelectedItem is AnimalSpecies) return;
+            var match = _species.FirstOrDefault(s => string.Equals(s.Name, cboSpecies.Text.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (match is not null) cboSpecies.SelectedItem = match; // fires SelectedIndexChanged → FilterBreeds
+        };
+
+        cboBreed = new ComboBox { Font = new Font("Segoe UI", 10.5f), DropDownStyle = ComboBoxStyle.DropDown, AutoCompleteMode = AutoCompleteMode.SuggestAppend, AutoCompleteSource = AutoCompleteSource.ListItems };
         cboBreed.SelectedIndexChanged += (_, _) => UpdateHeader();
+        cboBreed.Leave += (_, _) =>
+        {
+            if (cboBreed.SelectedItem is Breed) return;
+            var txt = cboBreed.Text.Trim();
+            foreach (object item in cboBreed.Items)
+                if (item is Breed b && string.Equals(b.Name, txt, StringComparison.OrdinalIgnoreCase))
+                { cboBreed.SelectedItem = item; return; }
+        };
 
         var gridId = MakeGrid(2);
         gridId.Controls.Add(WrapCell("Owner / Customer *", cboCustomer), 0, 0);
@@ -369,21 +439,29 @@ public class PetDialog : Form
         dtpDOB.Margin = new Padding(0, 0, 10, 0); chkNoDOB.Margin = new Padding(0, 4, 0, 0);
         pnlDob.Controls.AddRange(new Control[] { dtpDOB, chkNoDOB });
 
-        chkActive = new CheckBox { Text = "Patient is currently active", Checked = true, Font = new Font("Segoe UI", 10f), AutoSize = true };
-        chkActive.CheckedChanged += (_, _) => UpdateHeader();
-        var pnlStatus = new Panel { Height = 28 };
-        chkActive.Top = 4; chkActive.Left = 0; pnlStatus.Controls.Add(chkActive);
+        chkActive = new CheckBox { Text = "Active", Checked = true, Font = new Font("Segoe UI", 10f), AutoSize = false, Height = 26 };
+        chkActive.CheckedChanged += (_, _) =>
+        {
+            chkActive.Text = chkActive.Checked ? "Active" : "Inactive";
+            UpdateHeader();
+        };
 
         var gridLc = MakeGrid(1);
-        gridLc.Controls.Add(WrapCell("Date of Birth", pnlDob, stretchCtrl: false), 0, 0);
-        gridLc.Controls.Add(WrapCell("Patient Status", pnlStatus, rightCol: true, stretchCtrl: false), 1, 0);
+        gridLc.Controls.Add(WrapCell("Date of Birth",   pnlDob,    stretchCtrl: false), 0, 0);
+        gridLc.Controls.Add(WrapCell("Patient Status",  chkActive, rightCol: true, stretchCtrl: true), 1, 0);
 
         // ── CLINICAL NOTES ───────────────────────────────────────────────
         txtNotes = new TextBox
         {
-            Multiline = true, Height = 96, Margin = new Padding(0, 0, 0, 0),
+            Multiline = true, Height = 130, Margin = new Padding(0, 0, 0, 0),
             Font = new Font("Segoe UI", 10f), ScrollBars = ScrollBars.Vertical,
             PlaceholderText = "Allergies, conditions, special instructions..."
+        };
+        var notesTooltip = new ToolTip { AutoPopDelay = 12000, InitialDelay = 400, ReshowDelay = 200, ShowAlways = true };
+        txtNotes.TextChanged += (_, _) =>
+        {
+            var t = txtNotes.Text.Trim();
+            notesTooltip.SetToolTip(txtNotes, string.IsNullOrEmpty(t) ? "" : t);
         };
 
         // add sections top-to-bottom (first added = topmost in FlowLayoutPanel)
@@ -403,7 +481,8 @@ public class PetDialog : Form
         {
             SyncWidths();
             cboCustomer.DataSource = _customers;
-            cboSpecies.DataSource = _species;
+            cboSpecies.DataSource  = _species;
+            FilterBreeds(); // always populate breeds — SelectedIndexChanged timing is unreliable with AutoComplete+DataSource
 
             if (existing is not null)
             {
@@ -413,7 +492,9 @@ public class PetDialog : Form
                 numWeight.Value = existing.Weight;
                 if (existing.DateOfBirth.HasValue) dtpDOB.Value = existing.DateOfBirth.Value; else chkNoDOB.Checked = true;
                 txtColor.Text = existing.Color ?? ""; txtMicrochip.Text = existing.MicrochipNo ?? "";
-                txtNotes.Text = existing.Notes ?? ""; chkActive.Checked = existing.IsActive;
+                txtNotes.Text = existing.Notes ?? "";
+                chkActive.Checked = existing.IsActive;
+                chkActive.Text = existing.IsActive ? "Active" : "Inactive";
                 _profilePicture = existing.ProfilePicture;
                 if (_profilePicture is { Length: > 0 }) { using var ms = new System.IO.MemoryStream(_profilePicture); picAvatar.Image = Image.FromStream(ms); }
                 Result.Id = existing.Id;
@@ -442,7 +523,7 @@ public class PetDialog : Form
         var gender = cboGender.SelectedItem?.ToString() ?? "—";
         var weight = numWeight.Value > 0 ? $"  ·  {numWeight.Value:F1} kg" : "";
         lblHdrSub.Text = $"Owner: {owner}  ·  {species} / {breed}  ·  {gender}{weight}";
-        lblHdrStatus.Text = chkActive.Checked ? "● Active" : "○ Inactive";
+        lblHdrStatus.Text = chkActive.Checked ? "Active" : "Inactive";
         lblHdrStatus.ForeColor = chkActive.Checked ? Color.FromArgb(160, 255, 190) : Color.FromArgb(255, 160, 160);
     }
 
@@ -464,10 +545,20 @@ public class PetDialog : Form
 
     private void Save(object? s, EventArgs e)
     {
-        if (cboCustomer.SelectedItem is not Customer cust) { VetMS.Forms.CustomMessageBox.Show("Please select an owner.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        // DropDown + AutoComplete: SelectedItem may be null when user typed without clicking a suggestion.
+        // Fall back to matching the typed text against the source list.
+        var cust = cboCustomer.SelectedItem as Customer
+            ?? _customers.FirstOrDefault(c => string.Equals(c.FullName, cboCustomer.Text.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (cust is null) { VetMS.Forms.CustomMessageBox.Show("Please select an owner.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); cboCustomer.Focus(); return; }
+
         if (string.IsNullOrWhiteSpace(txtName.Text)) { VetMS.Forms.CustomMessageBox.Show("Patient name is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); txtName.Focus(); return; }
-        if (cboSpecies.SelectedItem is not AnimalSpecies sp) { VetMS.Forms.CustomMessageBox.Show("Please select a species.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-        var breed = cboBreed.SelectedItem as Breed;
+
+        var sp = cboSpecies.SelectedItem as AnimalSpecies
+            ?? _species.FirstOrDefault(s => string.Equals(s.Name, cboSpecies.Text.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (sp is null) { VetMS.Forms.CustomMessageBox.Show("Please select a species.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); cboSpecies.Focus(); return; }
+
+        var breed = cboBreed.SelectedItem as Breed
+            ?? _allBreeds.FirstOrDefault(b => string.Equals(b.Name, cboBreed.Text.Trim(), StringComparison.OrdinalIgnoreCase));
         Result = new Pet
         {
             Id = Result.Id,
@@ -501,10 +592,10 @@ public class PetViewDialog : Form
         Text = $"Patient Profile — {pet.Name}";
         // Calculate form size based on available screen size
         var screen = Screen.FromPoint(MousePosition);
-        int formWidth = Math.Min(980, (int)(screen.WorkingArea.Width * 0.80));
-        int formHeight = Math.Min(900, (int)(screen.WorkingArea.Height * 0.90));
+        int formWidth  = Math.Min(1240, (int)(screen.WorkingArea.Width  * 0.90));
+        int formHeight = Math.Min(920,  (int)(screen.WorkingArea.Height * 0.90));
         Size = new Size(formWidth, formHeight);
-        MinimumSize = new Size(900, 780);
+        MinimumSize = new Size(1060, 820);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false;
@@ -533,13 +624,13 @@ public class PetViewDialog : Form
             sbVitals.Controls.Add(new Label { Text = value, Left = sbX, Top = sbY, Width = sbW, Height = large ? 34 : 28, Font = new Font("Segoe UI", large ? 11.5f : 10f, large ? FontStyle.Bold : FontStyle.Regular), ForeColor = large ? UIHelper.Primary : Color.FromArgb(25, 35, 50), AutoSize = false }); sbY += (large ? 34 : 28) + 18;
             sbVitals.Controls.Add(new Panel { Left = sbX, Top = sbY - 7, Width = sbW, Height = 1, BackColor = Color.FromArgb(225, 227, 232) });
         }
-        void AddVitalPair(string cap1, string val1, string cap2, string val2)
+        void AddVitalPair(string cap1, string val1, string cap2, string val2, Color? val1Color = null, Color? val2Color = null)
         {
             int halfW = (sbW - 10) / 2;
             sbVitals.Controls.Add(new Label { Text = cap1.ToUpperInvariant(), Left = sbX, Top = sbY, Width = halfW, Height = 18, Font = new Font("Segoe UI", 7.5f, FontStyle.Bold), ForeColor = Color.FromArgb(140, 150, 165), AutoSize = false });
             sbVitals.Controls.Add(new Label { Text = cap2.ToUpperInvariant(), Left = sbX + halfW + 10, Top = sbY, Width = halfW, Height = 18, Font = new Font("Segoe UI", 7.5f, FontStyle.Bold), ForeColor = Color.FromArgb(140, 150, 165), AutoSize = false }); sbY += 19;
-            sbVitals.Controls.Add(new Label { Text = val1, Left = sbX, Top = sbY, Width = halfW, Height = 28, Font = new Font("Segoe UI", 10f), ForeColor = Color.FromArgb(25, 35, 50), AutoSize = false });
-            sbVitals.Controls.Add(new Label { Text = val2, Left = sbX + halfW + 10, Top = sbY, Width = halfW, Height = 28, Font = new Font("Segoe UI", 10f), ForeColor = Color.FromArgb(25, 35, 50), AutoSize = false }); sbY += 42;
+            sbVitals.Controls.Add(new Label { Text = val1, Left = sbX, Top = sbY, Width = halfW, Height = 28, Font = new Font("Segoe UI", 10f), ForeColor = val1Color ?? Color.FromArgb(25, 35, 50), AutoSize = false });
+            sbVitals.Controls.Add(new Label { Text = val2, Left = sbX + halfW + 10, Top = sbY, Width = halfW, Height = 28, Font = new Font("Segoe UI", 10f), ForeColor = val2Color ?? Color.FromArgb(25, 35, 50), AutoSize = false }); sbY += 42;
             sbVitals.Controls.Add(new Panel { Left = sbX, Top = sbY - 7, Width = sbW, Height = 1, BackColor = Color.FromArgb(225, 227, 232) });
         }
 
@@ -549,42 +640,84 @@ public class PetViewDialog : Form
         AddVitalRow("Species / Breed", $"{_pet.SpeciesName} / {breedDisplay}");
         AddVitalRow("Date of Birth", _pet.DateOfBirth?.ToString("MMM dd, yyyy") ?? "Unknown");
         AddVitalPair("Gender", _pet.Gender, "Weight", $"{_pet.Weight:F2} kg");
-        AddVitalPair("Status", _pet.IsActive ? "🟢 Active" : "🔴 Inactive", "Microchip", string.IsNullOrWhiteSpace(_pet.MicrochipNo) ? "None" : _pet.MicrochipNo);
+        AddVitalPair("Status", _pet.IsActive ? "● Active" : "● Inactive", "Microchip", string.IsNullOrWhiteSpace(_pet.MicrochipNo) ? "None" : _pet.MicrochipNo,
+            val1Color: _pet.IsActive ? Color.FromArgb(60, 180, 90) : Color.FromArgb(210, 70, 70));
         sidebar.Controls.Add(sbVitals); sidebar.Controls.Add(sbAvatarPanel);
 
         var contentArea = new Panel { Dock = DockStyle.Fill, BackColor = Color.White };
         var tabs = new TabControl { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 10f), Padding = new Point(16, 8) };
 
         var tabProfile = new TabPage("  Clinical Profile  ") { BackColor = Color.White, Padding = new Padding(0) };
-        var profileFlow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(20, 18, 10, 18), AutoScroll = true };
+        const int flowPad = 28;  // symmetric left & right padding inside profileFlow
+        const int colGap  = 20;  // gap between the two data columns
+        var profileFlow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(flowPad, 20, flowPad, 20), AutoScroll = true };
 
-        int availW = formWidth - 300 - 50;
-        int ctrlW = availW / 2 - 40;
-        TableLayoutPanel MakeGrid2Col() { var g = new TableLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 2, Margin = new Padding(0, 0, 0, 6) }; g.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, availW / 2)); g.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, availW / 2)); return g; }
+        // availW: content width inside the flow panel (sidebar + border + symmetric padding + scrollbar)
+        int availW = formWidth - 300 - 1 - (flowPad * 2) - 18;
+        int colW   = (availW - colGap) / 2;   // each column width
+        int ctrlW  = colW - 12;               // control inside cell (12px right breathing room)
+
+        // 3-column grid: left col | gap | right col — consistent bottom margin between sections
+        TableLayoutPanel MakeGrid2Col()
+        {
+            var g = new TableLayoutPanel
+            {
+                AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 3, Margin = new Padding(0, 0, 0, 24)
+            };
+            g.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, colW));
+            g.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, colGap));
+            g.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, colW));
+            return g;
+        }
         Control MakeRO(string text) => new TextBox { Text = text, Width = ctrlW, Font = new Font("Segoe UI", 10.5f), ReadOnly = true, BackColor = Color.White };
 
-        profileFlow.Controls.Add(new Panel { Width = 10, Height = 1, Margin = new Padding(0) });
         profileFlow.Controls.Add(UIHelper.CreateSectionLabel("IDENTITY & OWNERSHIP"));
         var gridId = MakeGrid2Col();
-        gridId.Margin = new Padding(0, 0, 0, 20);
         gridId.Controls.Add(UIHelper.WrapControl("Owner / Customer", MakeRO(_pet.CustomerName)), 0, 0);
-        gridId.Controls.Add(UIHelper.WrapControl("Patient Name", MakeRO(_pet.Name)), 1, 0);
-        gridId.Controls.Add(UIHelper.WrapControl("Animal Species", MakeRO(_pet.SpeciesName)), 0, 1);
-        gridId.Controls.Add(UIHelper.WrapControl("Breed (Specific)", MakeRO(breedDisplay)), 1, 1);
+        gridId.Controls.Add(UIHelper.WrapControl("Patient Name",     MakeRO(_pet.Name)),          2, 0);
+        gridId.Controls.Add(UIHelper.WrapControl("Animal Species",   MakeRO(_pet.SpeciesName)),   0, 1);
+        gridId.Controls.Add(UIHelper.WrapControl("Breed (Specific)", MakeRO(breedDisplay)),       2, 1);
         profileFlow.Controls.Add(gridId);
 
         profileFlow.Controls.Add(UIHelper.CreateSectionLabel("CLINICAL ATTRIBUTES"));
         var gridCl = MakeGrid2Col();
-        gridCl.Margin = new Padding(0, 0, 0, 20);
-        gridCl.Controls.Add(UIHelper.WrapControl("Gender", MakeRO(_pet.Gender)), 0, 0);
-        gridCl.Controls.Add(UIHelper.WrapControl("Weight (kg)", MakeRO($"{_pet.Weight:F2}")), 1, 0);
-        gridCl.Controls.Add(UIHelper.WrapControl("Primary Color / Mix", MakeRO(_pet.Color)), 0, 1);
-        gridCl.Controls.Add(UIHelper.WrapControl("Microchip Number", MakeRO(_pet.MicrochipNo ?? "")), 1, 1);
+        gridCl.Controls.Add(UIHelper.WrapControl("Gender",                MakeRO(_pet.Gender)),             0, 0);
+        gridCl.Controls.Add(UIHelper.WrapControl("Weight (kg)",           MakeRO($"{_pet.Weight:F2}")),     2, 0);
+        gridCl.Controls.Add(UIHelper.WrapControl("Primary Color / Mix",   MakeRO(_pet.Color)),              0, 1);
+        gridCl.Controls.Add(UIHelper.WrapControl("Microchip Number",      MakeRO(_pet.MicrochipNo ?? "")), 2, 1);
         profileFlow.Controls.Add(gridCl);
 
         profileFlow.Controls.Add(UIHelper.CreateSectionLabel("CLINICAL NOTES"));
-        var txtNotes = new TextBox { Text = _pet.Notes, Width = availW, Height = 110, Multiline = true, Font = new Font("Segoe UI", 10f), ScrollBars = ScrollBars.Vertical, Margin = new Padding(0, 0, 0, 20), ReadOnly = true, BackColor = Color.White };
-        profileFlow.Controls.Add(txtNotes);
+        var hasNotes  = !string.IsNullOrWhiteSpace(_pet.Notes);
+        var notesFull = _pet.Notes?.Trim() ?? "";
+        var preview   = hasNotes ? (notesFull.Length > 90 ? notesFull[..87] + "…" : notesFull) : "(No notes recorded)";
+        var notesCard = new Panel
+        {
+            Width = availW, Height = 52, Margin = new Padding(0, 0, 0, 24),
+            BackColor = Color.FromArgb(245, 247, 252),
+            Cursor = hasNotes ? Cursors.Help : Cursors.Default
+        };
+        notesCard.Paint += (_, e) =>
+        {
+            e.Graphics.DrawRectangle(new Pen(Color.FromArgb(220, 225, 235)), 0, 0, notesCard.Width - 1, notesCard.Height - 1);
+        };
+        var lblNoteIcon    = new Label { Text = "📋", Left = 12, Top = 14, Width = 24, Height = 24, Font = new Font("Segoe UI", 11f), AutoSize = false };
+        var lblNotePreview = new Label
+        {
+            Text = preview, Left = 40, Top = 8, Width = availW - 56, Height = 36,
+            Font = new Font("Segoe UI", 9.5f), ForeColor = hasNotes ? Color.FromArgb(40, 50, 65) : Color.FromArgb(160, 165, 175),
+            AutoSize = false
+        };
+        notesCard.Controls.AddRange(new Control[] { lblNoteIcon, lblNotePreview });
+        if (hasNotes)
+        {
+            var tt = new ToolTip { AutoPopDelay = 15000, InitialDelay = 300, ReshowDelay = 150, ShowAlways = true };
+            tt.SetToolTip(notesCard,     notesFull);
+            tt.SetToolTip(lblNoteIcon,   notesFull);
+            tt.SetToolTip(lblNotePreview, notesFull);
+        }
+        profileFlow.Controls.Add(notesCard);
         profileFlow.Controls.Add(new Panel { Width = availW, Height = 40, Margin = new Padding(0) }); // Bottom spacer to fix cutoff
         tabProfile.Controls.Add(profileFlow);
 
@@ -592,22 +725,23 @@ public class PetViewDialog : Form
         var dgvMedical = BuildHistoryGrid();
         var lblNoMedical = UIHelper.CreateEmptyDataLabel("No medical records found for this patient.");
         tabMedical.Controls.Add(dgvMedical); tabMedical.Controls.Add(lblNoMedical); lblNoMedical.BringToFront();
-        var medRecords = DataStore.GetMedicalRecords().Where(m => m.PetId == _pet.Id).OrderByDescending(m => m.CreatedAt)
-            .Select(m => new { m.Id, Date = m.CreatedAt.ToString("yyyy-MM-dd"), Vet = m.VetName, Diagnosis = m.Diagnosis.Length > 60 ? m.Diagnosis[..57] + "..." : m.Diagnosis, FollowUp = m.FollowUpDate?.ToString("yyyy-MM-dd") ?? "-" }).ToList();
+        // Store IDs in a parallel list so the Id column never appears in the grid
+        var rawMedical = DataStore.GetMedicalRecords().Where(m => m.PetId == _pet.Id).OrderByDescending(m => m.CreatedAt).ToList();
+        var medIds = rawMedical.Select(m => m.Id).ToList();
+        var medRecords = rawMedical.Select(m => new { Date = m.CreatedAt.ToString("yyyy-MM-dd"), Vet = m.VetName, Diagnosis = m.Diagnosis.Length > 60 ? m.Diagnosis[..57] + "..." : m.Diagnosis, FollowUp = m.FollowUpDate?.ToString("yyyy-MM-dd") ?? "-" }).ToList();
         if (medRecords.Count > 0)
         {
             dgvMedical.DataSource = medRecords;
-            if (dgvMedical.Columns["Id"] != null) dgvMedical.Columns["Id"].Visible = false;
-            if (dgvMedical.Columns["Date"] is { } mc1) { mc1.HeaderText = "Date"; mc1.Width = 100; }
-            if (dgvMedical.Columns["Vet"] is { } mc2) { mc2.HeaderText = "Attending Vet"; mc2.Width = 170; }
-            if (dgvMedical.Columns["Diagnosis"] is { } mc3) { mc3.HeaderText = "Diagnosis"; mc3.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill; }
-            if (dgvMedical.Columns["FollowUp"] is { } mc4) { mc4.HeaderText = "Follow-Up"; mc4.Width = 110; }
+            if (dgvMedical.Columns["Date"]      is { } mc1) { mc1.HeaderText = "Date";          mc1.Width = 100; }
+            if (dgvMedical.Columns["Vet"]       is { } mc2) { mc2.HeaderText = "Attending Vet"; mc2.Width = 170; }
+            if (dgvMedical.Columns["Diagnosis"] is { } mc3) { mc3.HeaderText = "Diagnosis";     mc3.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill; }
+            if (dgvMedical.Columns["FollowUp"]  is { } mc4) { mc4.HeaderText = "Follow-Up";     mc4.Width = 110; }
             lblNoMedical.Visible = false; dgvMedical.Visible = true;
         }
         else { lblNoMedical.Visible = true; dgvMedical.Visible = false; }
         dgvMedical.CellDoubleClick += (_, e) => {
-            if (e.RowIndex < 0 || dgvMedical.Rows[e.RowIndex].Cells["Id"]?.Value is not int rid) return;
-            var rec = DataStore.GetMedicalRecords().FirstOrDefault(m => m.Id == rid); if (rec is null) return;
+            if (e.RowIndex < 0 || e.RowIndex >= medIds.Count) return;
+            var rec = DataStore.GetMedicalRecords().FirstOrDefault(m => m.Id == medIds[e.RowIndex]); if (rec is null) return;
             using var dlg = new MedicalRecordDialog(rec, true); dlg.ShowDialog(this);
         };
 
@@ -615,17 +749,17 @@ public class PetViewDialog : Form
         var dgvAppt = BuildHistoryGrid();
         var lblNoAppt = UIHelper.CreateEmptyDataLabel("No appointments found for this patient.");
         tabAppt.Controls.Add(dgvAppt); tabAppt.Controls.Add(lblNoAppt); lblNoAppt.BringToFront();
+        // No Id column — projection omits it entirely
         var appts = DataStore.GetAppointments().Where(a => a.PetId == _pet.Id).OrderByDescending(a => a.AppointmentDate)
-            .Select(a => new { a.Id, Date = a.AppointmentDate.ToString("yyyy-MM-dd HH:mm"), Service = a.ServiceTypeName, Vet = a.VetName, a.Status, Duration = $"{a.Duration} min" }).ToList();
+            .Select(a => new { Date = a.AppointmentDate.ToString("yyyy-MM-dd HH:mm"), Service = a.ServiceTypeName, Vet = a.VetName, a.Status, Duration = $"{a.Duration} min" }).ToList();
         if (appts.Count > 0)
         {
             dgvAppt.DataSource = appts;
-            if (dgvAppt.Columns["Id"] != null) dgvAppt.Columns["Id"].Visible = false;
-            if (dgvAppt.Columns["Date"] is { } ac1) { ac1.HeaderText = "Date & Time"; ac1.Width = 140; }
-            if (dgvAppt.Columns["Service"] is { } ac2) { ac2.HeaderText = "Service"; ac2.Width = 170; }
-            if (dgvAppt.Columns["Vet"] is { } ac3) { ac3.HeaderText = "Veterinarian"; ac3.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill; }
-            if (dgvAppt.Columns["Status"] is { } ac4) { ac4.HeaderText = "Status"; ac4.Width = 110; }
-            if (dgvAppt.Columns["Duration"] is { } ac5) { ac5.HeaderText = "Duration"; ac5.Width = 80; }
+            if (dgvAppt.Columns["Date"]     is { } ac1) { ac1.HeaderText = "Date & Time";  ac1.Width = 140; }
+            if (dgvAppt.Columns["Service"]  is { } ac2) { ac2.HeaderText = "Service";       ac2.Width = 170; }
+            if (dgvAppt.Columns["Vet"]      is { } ac3) { ac3.HeaderText = "Veterinarian";  ac3.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill; }
+            if (dgvAppt.Columns["Status"]   is { } ac4) { ac4.HeaderText = "Status";        ac4.Width = 110; }
+            if (dgvAppt.Columns["Duration"] is { } ac5) { ac5.HeaderText = "Duration";      ac5.Width = 80; }
             lblNoAppt.Visible = false; dgvAppt.Visible = true;
         }
         else { lblNoAppt.Visible = true; dgvAppt.Visible = false; }
