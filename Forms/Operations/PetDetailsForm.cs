@@ -615,12 +615,13 @@ public class PetDetailsForm : Form
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // TAB 2 — MEDICAL RECORDS (card layout)
+    // TAB 2 — MEDICAL RECORDS  (expandable accordion cards)
     // ════════════════════════════════════════════════════════════════════════
     private Control BuildMedRecordsTab()
     {
-        var outer = new Panel { BackColor = Color.White };
-        outer.Controls.Add(SubHeader("Clinical visit records — double-click a card to view full detail"));
+        var outer  = new Panel { BackColor = Color.White };
+        outer.Controls.Add(SubHeader(
+            $"{_records.Count} visit record{(_records.Count == 1 ? "" : "s")}  ·  click ▼ on any card to reveal notes and medications"));
 
         var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = Color.White };
         var stack  = new FlowLayoutPanel
@@ -631,111 +632,193 @@ public class PetDetailsForm : Form
         };
 
         if (!_records.Any())
-        {
-            stack.Controls.Add(EmptyLbl("No medical records yet.\nClick \"+ Medical Record\" to add one."));
-        }
+            stack.Controls.Add(EmptyLbl("No medical records yet.\nClick \"+ Medical Record\" above to add the first one."));
         else
-        {
             foreach (var rec in _records)
-                stack.Controls.Add(MedRecCard(rec));
-        }
+                stack.Controls.Add(MedRecCard(rec, stack));
 
         scroll.Controls.Add(stack);
         outer.Controls.Add(scroll);
         return outer;
     }
 
-    private Panel MedRecCard(MedicalRecord rec)
+    private Panel MedRecCard(MedicalRecord rec, FlowLayoutPanel owner)
     {
-        bool hasFU  = rec.FollowUpDate.HasValue;
-        bool overdue = hasFU && rec.FollowUpDate!.Value.Date < DateTime.Today;
+        var meds      = DataStore.GetRecordMedications(rec.Id);
+        bool hasFU    = rec.FollowUpDate.HasValue;
+        bool overdue  = hasFU && rec.FollowUpDate!.Value.Date < DateTime.Today;
+        bool hasNotes = !string.IsNullOrWhiteSpace(rec.Notes);
+        bool hasMeds  = meds.Any();
+        bool canExpand = hasNotes || hasMeds;
 
+        // ── Heights ───────────────────────────────────────────────────────────
+        const int COLLAPSED_H = 100;
+        int expandH = 0;
+        if (hasNotes)  expandH += 16 + 20 + 18 + 20;           // divider + heading + text + gap
+        if (hasMeds)   expandH += 16 + 20 + meds.Count * 44;   // divider + heading + rows
+        expandH += 10;                                           // bottom padding
+
+        bool expanded = false;
+
+        // ── Card shell ────────────────────────────────────────────────────────
         var card = new Panel
         {
-            Width = 900, Height = 94,
-            BackColor = Color.White,
-            Margin = new Padding(0, 0, 0, 8),
-            Cursor = Cursors.Hand
+            Width = 900, Height = COLLAPSED_H,
+            BackColor = Color.White, Margin = new Padding(0, 0, 0, 8)
         };
         card.MouseEnter += (_, _) => { card.BackColor = Color.FromArgb(250, 251, 253); card.Invalidate(); };
         card.MouseLeave += (_, _) => { card.BackColor = Color.White;                   card.Invalidate(); };
         card.Paint += (_, e) =>
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using var path  = RoundPath(new Rectangle(0, 0, card.Width - 2, card.Height - 1), 8);
-            using var pen   = new Pen(Color.FromArgb(226, 229, 236));
-            e.Graphics.DrawPath(pen, path);
-            var stripeColor = overdue ? Theme.AppTheme.Warning : Theme.AppTheme.Primary;
-            using var stripe = new SolidBrush(stripeColor);
+            using var path   = RoundPath(new Rectangle(0, 0, card.Width - 2, card.Height - 1), 8);
+            using var border = new Pen(Color.FromArgb(226, 229, 236));
+            e.Graphics.DrawPath(border, path);
+            var sc = overdue ? Theme.AppTheme.Warning : Theme.AppTheme.Primary;
+            using var stripe = new SolidBrush(sc);
             e.Graphics.FillRectangle(stripe, 0, 12, 3, card.Height - 24);
+            // Divider above expand section when open
+            if (expanded)
+            {
+                using var div = new Pen(Color.FromArgb(235, 238, 244));
+                e.Graphics.DrawLine(div, 16, COLLAPSED_H, card.Width - 16, COLLAPSED_H);
+            }
         };
 
-        // Row 1: date + vet + optional follow-up badge + view button
-        var lblDate = new Label
-        {
-            Text = rec.CreatedAt.ToString("MMMM d, yyyy"),
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold), ForeColor = Color.FromArgb(38, 48, 68), AutoSize = true, Left = 16, Top = 10
-        };
-        var lblVet = new Label
-        {
-            Text = $"Dr. {rec.VetName}", Font = new Font("Segoe UI", 8f),
-            ForeColor = Color.FromArgb(105, 118, 142), AutoSize = true, Top = 12
-        };
-        var btnView = new Button
-        {
-            Text = "View →", Font = new Font("Segoe UI", 8f, FontStyle.Bold),
-            ForeColor = Theme.AppTheme.Primary, BackColor = Color.Transparent,
-            FlatStyle = FlatStyle.Flat, AutoSize = true, Cursor = Cursors.Hand, Top = 8
-        };
-        btnView.FlatAppearance.BorderSize = 0;
-        btnView.Click += (_, _) => { using var d = new MedicalRecordDialog(rec, true); d.ShowDialog(); };
+        // ── Row 1 — Date · Vet ────────────────────────────────────────────────
+        var lblDate = new Label { Text = rec.CreatedAt.ToString("MMMM d, yyyy"), Font = new Font("Segoe UI", 9f, FontStyle.Bold), ForeColor = Color.FromArgb(32, 42, 62), AutoSize = true, Left = 16, Top = 10 };
+        var lblVet  = new Label { Text = $"Dr. {rec.VetName}", Font = new Font("Segoe UI", 8f), ForeColor = Color.FromArgb(105, 118, 142), AutoSize = true, Top = 12 };
 
-        // Follow-up badge (optional)
+        // Follow-up badge
         Label? fuBadge = null;
         if (hasFU)
         {
             var c = overdue ? Theme.AppTheme.Danger : Theme.AppTheme.Success;
             fuBadge = new Label
             {
-                Text = $"↺ {rec.FollowUpDate!.Value:MMM d}",
+                Text = $"↺ Follow-up: {rec.FollowUpDate!.Value:MMM d, yyyy}",
                 Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
-                ForeColor = c, BackColor = Color.FromArgb(25, c.R, c.G, c.B),
-                AutoSize = true, Padding = new Padding(6, 3, 6, 3)
+                ForeColor = c, BackColor = Color.FromArgb(22, c.R, c.G, c.B),
+                AutoSize = true, Padding = new Padding(6, 3, 6, 3), Top = 10
             };
         }
 
-        // Row 2: Dx label + diagnosis text
-        var lblDxTag = new Label { Text = "Dx:", Font = new Font("Segoe UI", 8f, FontStyle.Bold), ForeColor = Color.FromArgb(105, 118, 142), AutoSize = true, Left = 16, Top = 36 };
-        var lblDx    = new Label
+        var btnView = new Button
         {
-            Text = Truncate(rec.Diagnosis, 110),
-            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), ForeColor = Color.FromArgb(28, 38, 58),
-            AutoSize = false, Width = 700, Height = 20, Left = 42, Top = 34
+            Text = "View →", Font = new Font("Segoe UI", 8f, FontStyle.Bold),
+            ForeColor = Theme.AppTheme.Primary, BackColor = Color.Transparent,
+            FlatStyle = FlatStyle.Flat, AutoSize = true, Cursor = Cursors.Hand, Top = 7
         };
+        btnView.FlatAppearance.BorderSize = 0;
+        btnView.Click += (_, _) => { using var d = new MedicalRecordDialog(rec, true); d.ShowDialog(); };
 
-        // Row 3: Tx label + treatment text
-        var lblTxTag = new Label { Text = "Tx:", Font = new Font("Segoe UI", 8f, FontStyle.Bold), ForeColor = Color.FromArgb(105, 118, 142), AutoSize = true, Left = 16, Top = 60 };
-        var lblTx    = new Label
+        // ── Row 2 — Dx ────────────────────────────────────────────────────────
+        var lblDxTag = new Label { Text = "Dx:", Font = new Font("Segoe UI", 8f, FontStyle.Bold), ForeColor = Color.FromArgb(105, 118, 142), AutoSize = true, Left = 16, Top = 37 };
+        var lblDx    = new Label { Text = rec.Diagnosis, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), ForeColor = Color.FromArgb(25, 35, 55), AutoSize = false, Width = 720, Height = 20, Left = 42, Top = 35 };
+
+        // ── Row 3 — Tx ────────────────────────────────────────────────────────
+        var lblTxTag = new Label { Text = "Tx:", Font = new Font("Segoe UI", 8f, FontStyle.Bold), ForeColor = Color.FromArgb(105, 118, 142), AutoSize = true, Left = 16, Top = 62 };
+        var lblTx    = new Label { Text = rec.Treatment, Font = new Font("Segoe UI", 8.5f), ForeColor = Color.FromArgb(65, 80, 105), AutoSize = false, Width = 680, Height = 18, Left = 42, Top = 61 };
+
+        // ── Expand toggle button ─────────────────────────────────────────────
+        Button? btnToggle = null;
+        if (canExpand)
         {
-            Text = Truncate(rec.Treatment, 110),
-            Font = new Font("Segoe UI", 8.5f), ForeColor = Color.FromArgb(68, 82, 108),
-            AutoSize = false, Width = 640, Height = 18, Left = 42, Top = 59
-        };
+            btnToggle = new Button
+            {
+                Text = "▼  Notes & Meds", Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(100, 115, 142), BackColor = Color.Transparent,
+                FlatStyle = FlatStyle.Flat, AutoSize = true, Cursor = Cursors.Hand,
+                Top = COLLAPSED_H - 26
+            };
+            btnToggle.FlatAppearance.BorderSize = 0;
+        }
 
-        var controls = new List<Control> { lblDate, lblVet, btnView, lblDxTag, lblDx, lblTxTag, lblTx };
-        if (fuBadge != null) controls.Add(fuBadge);
-        card.Controls.AddRange(controls.ToArray());
+        // ── Expanded section ─────────────────────────────────────────────────
+        Panel? expandSection = null;
+        if (canExpand)
+        {
+            expandSection = new Panel
+            {
+                Left = 0, Top = COLLAPSED_H, Width = card.Width, Height = expandH,
+                BackColor = Color.White, Visible = false
+            };
+
+            int ey = 12;
+
+            // Notes block
+            if (hasNotes)
+            {
+                expandSection.Controls.Add(new Label { Text = "CLINICAL NOTES", Font = new Font("Segoe UI", 7.5f, FontStyle.Bold), ForeColor = Color.FromArgb(128, 140, 165), AutoSize = true, Left = 16, Top = ey });
+                ey += 20;
+                var notesTxt = new Label
+                {
+                    Text = rec.Notes, Font = new Font("Segoe UI", 9f),
+                    ForeColor = Color.FromArgb(50, 65, 90),
+                    AutoSize = false, Width = card.Width - 32, Height = 36,
+                    Left = 16, Top = ey
+                };
+                expandSection.Controls.Add(notesTxt);
+                ey += 42;
+            }
+
+            // Medications block
+            if (hasMeds)
+            {
+                expandSection.Controls.Add(new Label { Text = "MEDICATIONS PRESCRIBED", Font = new Font("Segoe UI", 7.5f, FontStyle.Bold), ForeColor = Color.FromArgb(128, 140, 165), AutoSize = true, Left = 16, Top = ey });
+                ey += 20;
+
+                foreach (var med in meds)
+                {
+                    // Bullet + medication name
+                    expandSection.Controls.Add(new Label { Text = "●", Font = new Font("Segoe UI", 7f), ForeColor = Theme.AppTheme.Primary, AutoSize = true, Left = 16, Top = ey + 2 });
+                    expandSection.Controls.Add(new Label
+                    {
+                        Text = med.MedicationName,
+                        Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                        ForeColor = Color.FromArgb(25, 38, 60),
+                        AutoSize = true, Left = 28, Top = ey
+                    });
+                    // Dosage chip
+                    expandSection.Controls.Add(new Label
+                    {
+                        Text = med.Dosage,
+                        Font = new Font("Segoe UI", 8.5f),
+                        ForeColor = Color.FromArgb(70, 90, 125),
+                        AutoSize = false, Width = 580, Height = 18,
+                        Left = 28, Top = ey + 22
+                    });
+                    ey += 44;
+                }
+            }
+
+            card.Controls.Add(expandSection);
+
+            btnToggle!.Click += (_, _) =>
+            {
+                expanded = !expanded;
+                expandSection.Visible = expanded;
+                card.Height = expanded ? COLLAPSED_H + expandH : COLLAPSED_H;
+                btnToggle.Text = expanded ? "▲  Less" : "▼  Notes & Meds";
+                card.Invalidate();
+                owner.PerformLayout();
+            };
+        }
+
+        // ── Assemble ─────────────────────────────────────────────────────────
+        var all = new List<Control> { lblDate, lblVet, btnView, lblDxTag, lblDx, lblTxTag, lblTx };
+        if (fuBadge   != null) all.Add(fuBadge);
+        if (btnToggle != null) all.Add(btnToggle);
+        card.Controls.AddRange(all.ToArray());
 
         card.Layout += (_, _) =>
         {
             lblDate.Left  = 16; lblDate.Top = 10;
             lblVet.Left   = lblDate.Right + 14; lblVet.Top = 12;
             btnView.Left  = card.Width - btnView.Width - 14; btnView.Top = 8;
-            if (fuBadge != null)
-            {
-                fuBadge.Left = btnView.Left - fuBadge.Width - 10;
-                fuBadge.Top  = 11;
-            }
+            if (fuBadge != null)   { fuBadge.Left = btnView.Left - fuBadge.Width - 10; fuBadge.Top = 10; }
+            if (btnToggle != null) { btnToggle.Left = card.Width - btnToggle.Width - 14; btnToggle.Top = COLLAPSED_H - 27; }
+            if (expandSection != null) expandSection.Width = card.Width;
         };
 
         card.DoubleClick += (_, _) => { using var d = new MedicalRecordDialog(rec, true); d.ShowDialog(); };
@@ -743,17 +826,33 @@ public class PetDetailsForm : Form
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // TAB 3 — APPOINTMENTS
+    // TAB 3 — APPOINTMENTS  (grid + selected-row detail panel)
     // ════════════════════════════════════════════════════════════════════════
     private Control BuildAppointmentsTab()
     {
         var wrapper = new Panel { BackColor = Color.White };
-        wrapper.Controls.Add(SubHeader("All appointments — past, present and upcoming"));
+        wrapper.Controls.Add(SubHeader(
+            $"{_appts.Count} appointment{(_appts.Count == 1 ? "" : "s")} total  ·  click a row to see detail and linked medical record"));
 
+        // ── Detail panel (bottom, hidden until row selected) ─────────────────
+        var detail = new Panel
+        {
+            Dock = DockStyle.Bottom, Height = 0,
+            BackColor = Color.FromArgb(249, 250, 252)
+        };
+        detail.Paint += (_, e) =>
+        {
+            using var top = new Pen(Color.FromArgb(226, 229, 236));
+            e.Graphics.DrawLine(top, 0, 0, detail.Width, 0);
+        };
+
+        // ── Grid ─────────────────────────────────────────────────────────────
         var grid = StyledGrid();
         grid.Dock = DockStyle.Fill;
-        grid.DataSource = _appts.Select(a => new
+
+        var apptRows = _appts.Select(a => new
         {
+            a.Id,
             Date     = a.AppointmentDate.ToString("MMM d, yyyy  HH:mm"),
             Service  = a.ServiceTypeName,
             Vet      = a.VetName,
@@ -762,8 +861,11 @@ public class PetDetailsForm : Form
             Notes    = string.IsNullOrWhiteSpace(a.Notes) ? "—" : a.Notes
         }).ToList();
 
-        SetCols(grid, ("Date", 148), ("Service", 0), ("Vet", 150), ("Duration", 78), ("Status", 108), ("Notes", 170));
+        grid.DataSource = apptRows;
+        if (grid.Columns["Id"] != null) grid.Columns["Id"].Visible = false;
+        SetCols(grid, ("Date", 148), ("Service", 0), ("Vet", 152), ("Duration", 78), ("Status", 108), ("Notes", 170));
 
+        // Status cell colour
         grid.CellFormatting += (_, e) =>
         {
             if (e.RowIndex < 0 || grid.Columns[e.ColumnIndex].Name != "Status" || e.Value == null) return;
@@ -777,86 +879,211 @@ public class PetDetailsForm : Form
             };
         };
 
+        // Row click → populate detail panel
+        grid.SelectionChanged += (_, _) =>
+        {
+            if (grid.SelectedRows.Count == 0) return;
+            int id   = (int)grid.SelectedRows[0].Cells["Id"].Value;
+            var appt = _appts.FirstOrDefault(a => a.Id == id);
+            if (appt == null) return;
+
+            // Linked medical record (appointment_id match)
+            var linkedRec = _records.FirstOrDefault(r => r.AppointmentId == appt.Id);
+            int panelH    = linkedRec != null ? 150 : 80;
+
+            detail.Height = panelH;
+            detail.Controls.Clear();
+
+            int x = 16, y = 10;
+
+            // ── Appointment meta row ──────────────────────────────────────────
+            detail.Controls.Add(new Label { Text = "APPOINTMENT DETAIL", Font = new Font("Segoe UI", 7.5f, FontStyle.Bold), ForeColor = Color.FromArgb(128, 140, 165), AutoSize = true, Left = x, Top = y });
+            y += 22;
+
+            var metaLine = new Label
+            {
+                Text = $"{appt.ServiceTypeName}  ·  {appt.VetName}  ·  {appt.AppointmentDate:MMM d, yyyy  HH:mm}  ·  {appt.Duration} min  ·  {appt.Status}",
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold), ForeColor = Color.FromArgb(30, 42, 65),
+                AutoSize = true, Left = x, Top = y
+            };
+            detail.Controls.Add(metaLine);
+            y += 20;
+
+            if (!string.IsNullOrWhiteSpace(appt.Notes) && appt.Notes != "—")
+            {
+                detail.Controls.Add(new Label { Text = appt.Notes, Font = new Font("Segoe UI", 8.5f), ForeColor = Color.FromArgb(75, 90, 118), AutoSize = false, Width = detail.Width - 32, Height = 18, Left = x, Top = y });
+                y += 22;
+            }
+
+            // ── Linked medical record ─────────────────────────────────────────
+            if (linkedRec != null)
+            {
+                y += 6;
+                detail.Controls.Add(new Label { Text = "LINKED MEDICAL RECORD", Font = new Font("Segoe UI", 7.5f, FontStyle.Bold), ForeColor = Theme.AppTheme.Primary, AutoSize = true, Left = x, Top = y });
+                y += 20;
+
+                detail.Controls.Add(new Label { Text = "Dx:", Font = new Font("Segoe UI", 8f, FontStyle.Bold), ForeColor = Color.FromArgb(105, 118, 142), AutoSize = true, Left = x, Top = y });
+                detail.Controls.Add(new Label { Text = linkedRec.Diagnosis, Font = new Font("Segoe UI", 9f, FontStyle.Bold), ForeColor = Color.FromArgb(25, 35, 55), AutoSize = false, Width = detail.Width - 60, Height = 18, Left = x + 28, Top = y });
+                y += 22;
+
+                detail.Controls.Add(new Label { Text = "Tx:", Font = new Font("Segoe UI", 8f, FontStyle.Bold), ForeColor = Color.FromArgb(105, 118, 142), AutoSize = true, Left = x, Top = y });
+                detail.Controls.Add(new Label { Text = linkedRec.Treatment, Font = new Font("Segoe UI", 8.5f), ForeColor = Color.FromArgb(65, 80, 105), AutoSize = false, Width = detail.Width - 60, Height = 18, Left = x + 28, Top = y });
+
+                var meds = DataStore.GetRecordMedications(linkedRec.Id);
+                if (meds.Any())
+                {
+                    y += 20;
+                    var medNames = string.Join("  ·  ", meds.Select(m => m.MedicationName));
+                    detail.Controls.Add(new Label { Text = "Rx:", Font = new Font("Segoe UI", 8f, FontStyle.Bold), ForeColor = Color.FromArgb(105, 118, 142), AutoSize = true, Left = x, Top = y });
+                    detail.Controls.Add(new Label { Text = medNames, Font = new Font("Segoe UI", 8.5f), ForeColor = Color.FromArgb(0, 120, 80), AutoSize = false, Width = detail.Width - 60, Height = 18, Left = x + 28, Top = y });
+                }
+            }
+        };
+
         WrapGrid(wrapper, grid, "No appointments on record.");
+        wrapper.Controls.Add(detail);
         return wrapper;
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // TAB 4 — CBC RESULTS  (with reference ranges + colour flagging)
+    // TAB 4 — CBC RESULTS  (all 13 parameters + leukogram detail panel)
     // ════════════════════════════════════════════════════════════════════════
     private Control BuildCbcTab()
     {
         var wrapper = new Panel { BackColor = Color.White };
         wrapper.Controls.Add(SubHeader(
-            "Complete Blood Count  ·  ✓ = normal  ↑ = high (red)  ↓ = low (blue)  ·  double-click to view full panel"));
+            "All CBC parameters  ·  ✓ normal  ↑ high  ↓ low  ·  click a row for leukogram breakdown  ·  double-click to edit"));
 
-        // Legend strip
+        // ── Colour legend ─────────────────────────────────────────────────────
         var legend = new Panel { Dock = DockStyle.Top, Height = 30, BackColor = Color.FromArgb(249, 250, 252) };
         legend.Paint += (_, e) => { using var p = new Pen(Color.FromArgb(232, 235, 240)); e.Graphics.DrawLine(p, 0, legend.Height - 1, legend.Width, legend.Height - 1); };
-        var legItems = new[]
-        {
-            ("● Normal range",   Theme.AppTheme.Success),
-            ("● High ↑",         Theme.AppTheme.Danger),
-            ("● Low ↓",          Color.FromArgb(0, 110, 200)),
-            ("Reference: Canine", Color.FromArgb(155, 165, 180))
-        };
-        var legLabels = legItems.Select(li => new Label
-        {
-            Text = li.Item1, Font = new Font("Segoe UI", 8f),
-            ForeColor = li.Item2, AutoSize = true, Top = 7
-        }).ToArray();
+        var legItems = new[] { ("● Normal ✓", Theme.AppTheme.Success), ("● High ↑", Theme.AppTheme.Danger), ("● Low ↓", Color.FromArgb(0, 110, 200)), ("Ref: canine normals", Color.FromArgb(150, 162, 178)) };
+        var legLabels = legItems.Select(li => new Label { Text = li.Item1, Font = new Font("Segoe UI", 8f), ForeColor = li.Item2, AutoSize = true, Top = 7 }).ToArray();
         legend.Controls.AddRange(legLabels);
-        legend.Resize += (_, _) => { int x = 16; foreach (var l in legLabels) { l.Left = x; x += l.Width + 20; } };
+        legend.Resize += (_, _) => { int lx = 16; foreach (var l in legLabels) { l.Left = lx; lx += l.Width + 20; } };
         wrapper.Controls.Add(legend);
 
+        // ── Leukogram detail panel (bottom) ───────────────────────────────────
+        var leukoPanel = new Panel { Dock = DockStyle.Bottom, Height = 0, BackColor = Color.FromArgb(249, 250, 252) };
+        leukoPanel.Paint += (_, e) => { using var p = new Pen(Color.FromArgb(226, 229, 236)); e.Graphics.DrawLine(p, 0, 0, leukoPanel.Width, 0); };
+
+        // ── Grid — ALL 13 parameters ─────────────────────────────────────────
         var grid = StyledGrid();
         grid.Dock = DockStyle.Fill;
 
-        // Build display rows with flagged values
         var rows = _cbcList.Select(c => new
         {
             c.Id,
-            Date    = c.TestDate.ToString("MMM d, yyyy"),
-            WBC     = Flag(c.Wbc, CbcRef["WBC"].Lo, CbcRef["WBC"].Hi),
-            RBC     = Flag(c.Rbc, CbcRef["RBC"].Lo, CbcRef["RBC"].Hi),
-            HGB     = Flag(c.Hgb, CbcRef["HGB"].Lo, CbcRef["HGB"].Hi),
-            HCT     = Flag(c.Hct, CbcRef["HCT"].Lo, CbcRef["HCT"].Hi),
-            PLT     = Flag(c.Plt, CbcRef["PLT"].Lo, CbcRef["PLT"].Hi),
-            MCV     = Flag(c.Mcv, CbcRef["MCV"].Lo, CbcRef["MCV"].Hi),
+            Date  = c.TestDate.ToString("MMM d, yyyy"),
+            // Erythrogram
+            WBC   = Flag(c.Wbc,  CbcRef["WBC"].Lo, CbcRef["WBC"].Hi),
+            RBC   = Flag(c.Rbc,  CbcRef["RBC"].Lo, CbcRef["RBC"].Hi),
+            HGB   = Flag(c.Hgb,  CbcRef["HGB"].Lo, CbcRef["HGB"].Hi),
+            HCT   = Flag(c.Hct,  CbcRef["HCT"].Lo, CbcRef["HCT"].Hi),
+            MCV   = Flag(c.Mcv,  CbcRef["MCV"].Lo, CbcRef["MCV"].Hi),
+            MCH   = Flag(c.Mch,  CbcRef["MCH"].Lo, CbcRef["MCH"].Hi),
+            // Platelets
+            PLT   = Flag(c.Plt,  CbcRef["PLT"].Lo, CbcRef["PLT"].Hi),
+            // Leukogram (shown as % — no strict ref in display; detail panel shows them)
+            NEU   = $"{c.Neu:F0}%",
+            LYM   = $"{c.Lym:F0}%",
+            MON   = $"{c.Mon:F0}%",
+            EOS   = $"{c.Eos:F0}%",
+            BAS   = $"{c.Bas:F0}%",
             Remarks = string.IsNullOrWhiteSpace(c.Remarks) ? "—" : c.Remarks
         }).ToList();
 
         grid.DataSource = rows;
         if (grid.Columns["Id"] != null) grid.Columns["Id"].Visible = false;
-        SetCols(grid, ("Date", 110), ("WBC", 82), ("RBC", 82), ("HGB", 82), ("HCT", 78), ("PLT", 78), ("MCV", 78), ("Remarks", 0));
+        SetCols(grid,
+            ("Date", 110),
+            ("WBC", 80), ("RBC", 76), ("HGB", 76), ("HCT", 72), ("MCV", 72), ("MCH", 72), ("PLT", 76),
+            ("NEU", 56), ("LYM", 56), ("MON", 54), ("EOS", 54), ("BAS", 50),
+            ("Remarks", 0));
 
-        // Column header tooltips with units & reference
+        // Column tooltips with units + reference
         var tips = new Dictionary<string, string>
         {
-            ["WBC"] = "White Blood Cells (10⁹/L)   Ref: 6.0 – 17.0",
-            ["RBC"] = "Red Blood Cells (10¹²/L)    Ref: 5.5 – 8.5",
-            ["HGB"] = "Hemoglobin (g/dL)            Ref: 12.0 – 18.0",
-            ["HCT"] = "Hematocrit (%)               Ref: 37 – 55",
-            ["PLT"] = "Platelets (10⁹/L)            Ref: 200 – 500",
-            ["MCV"] = "Mean Corp. Volume (fL)        Ref: 60 – 77",
+            ["WBC"]  = "White Blood Cells (10⁹/L)      Ref: 6.0–17.0",
+            ["RBC"]  = "Red Blood Cells (10¹²/L)       Ref: 5.5–8.5",
+            ["HGB"]  = "Hemoglobin (g/dL)               Ref: 12.0–18.0",
+            ["HCT"]  = "Hematocrit (%)                  Ref: 37–55",
+            ["MCV"]  = "Mean Corp. Volume (fL)           Ref: 60–77",
+            ["MCH"]  = "Mean Corp. Hemoglobin (pg)       Ref: 19.5–24.5",
+            ["PLT"]  = "Platelets (10⁹/L)               Ref: 200–500",
+            ["NEU"]  = "Neutrophils % differential",
+            ["LYM"]  = "Lymphocytes % differential",
+            ["MON"]  = "Monocytes % differential",
+            ["EOS"]  = "Eosinophils % differential",
+            ["BAS"]  = "Basophils % differential",
         };
         foreach (var (col, tip) in tips)
             if (grid.Columns[col] != null) grid.Columns[col].ToolTipText = tip;
 
-        // Colour-code cells by flag character
+        // Colour code flagged erythrogram + platelet cells
+        var flaggedCols = new HashSet<string> { "WBC", "RBC", "HGB", "HCT", "MCV", "MCH", "PLT" };
         grid.CellFormatting += (_, e) =>
         {
             if (e.RowIndex < 0 || e.Value == null) return;
-            var name = grid.Columns[e.ColumnIndex].Name;
-            if (name is "WBC" or "RBC" or "HGB" or "HCT" or "PLT" or "MCV")
+            var col = grid.Columns[e.ColumnIndex].Name;
+            if (flaggedCols.Contains(col))
             {
                 var s = e.Value.ToString() ?? "";
-                if (s.Contains('↑'))      { e.CellStyle.ForeColor = Theme.AppTheme.Danger;    e.CellStyle.Font = new Font("Segoe UI", 9f, FontStyle.Bold); }
-                else if (s.Contains('↓')) { e.CellStyle.ForeColor = Color.FromArgb(0, 105, 195); e.CellStyle.Font = new Font("Segoe UI", 9f, FontStyle.Bold); }
+                if      (s.Contains('↑')) { e.CellStyle.ForeColor = Theme.AppTheme.Danger;          e.CellStyle.Font = new Font("Segoe UI", 9f, FontStyle.Bold); }
+                else if (s.Contains('↓')) { e.CellStyle.ForeColor = Color.FromArgb(0, 100, 195);    e.CellStyle.Font = new Font("Segoe UI", 9f, FontStyle.Bold); }
                 else if (s.Contains('✓')) { e.CellStyle.ForeColor = Theme.AppTheme.Success; }
             }
         };
 
+        // Row click → populate leukogram detail panel
+        grid.SelectionChanged += (_, _) =>
+        {
+            if (grid.SelectedRows.Count == 0) return;
+            int id = (int)grid.SelectedRows[0].Cells["Id"].Value;
+            var c  = _cbcList.FirstOrDefault(x => x.Id == id);
+            if (c == null) return;
+
+            leukoPanel.Height = 96;
+            leukoPanel.Controls.Clear();
+
+            int lx = 16, ly = 10;
+            leukoPanel.Controls.Add(new Label
+            {
+                Text = $"LEUKOGRAM — {c.TestDate:MMMM d, yyyy}",
+                Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(128, 140, 165), AutoSize = true, Left = lx, Top = ly
+            });
+            ly += 22;
+
+            // 5-cell differential bars (visual percentage)
+            var diffs = new[] { ("NEU", c.Neu, 40m, 75m), ("LYM", c.Lym, 20m, 45m), ("MON", c.Mon, 2m, 9m), ("EOS", c.Eos, 0m, 7m), ("BAS", c.Bas, 0m, 2m) };
+            int barX = lx;
+            foreach (var (name, val, lo, hi) in diffs)
+            {
+                var valClr = val > hi ? Theme.AppTheme.Danger : val < lo ? Color.FromArgb(0, 100, 195) : Theme.AppTheme.Success;
+                var chip = new Panel { Width = 120, Height = 42, Left = barX, Top = ly, BackColor = Color.Transparent };
+                chip.Controls.Add(new Label { Text = name, Font = new Font("Segoe UI", 7.5f, FontStyle.Bold), ForeColor = Color.FromArgb(128, 140, 165), AutoSize = true, Left = 0, Top = 0 });
+                chip.Controls.Add(new Label { Text = $"{val:F0}%", Font = new Font("Segoe UI", 12f, FontStyle.Bold), ForeColor = valClr, AutoSize = true, Left = 0, Top = 14 });
+                chip.Controls.Add(new Label { Text = $"({lo}–{hi})", Font = new Font("Segoe UI", 7f), ForeColor = Color.FromArgb(158, 168, 182), AutoSize = true, Left = 0, Top = 32 });
+                leukoPanel.Controls.Add(chip);
+                barX += 126;
+            }
+
+            // Remarks
+            if (!string.IsNullOrWhiteSpace(c.Remarks) && c.Remarks != "—")
+            {
+                leukoPanel.Controls.Add(new Label
+                {
+                    Text = $"Remarks: {c.Remarks}",
+                    Font = new Font("Segoe UI", 8.5f, FontStyle.Italic),
+                    ForeColor = Color.FromArgb(90, 105, 130),
+                    AutoSize = false, Width = leukoPanel.Width - barX - 20, Height = 42,
+                    Left = barX, Top = ly
+                });
+            }
+        };
+
+        // Double-click → full CBC dialog
         grid.CellDoubleClick += (_, e) =>
         {
             if (e.RowIndex < 0) return;
@@ -866,6 +1093,7 @@ public class PetDetailsForm : Form
         };
 
         WrapGrid(wrapper, grid, "No CBC results on record.\nClick \"+ CBC\" above to add lab results.");
+        wrapper.Controls.Add(leukoPanel);
         return wrapper;
     }
 
