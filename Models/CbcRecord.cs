@@ -30,4 +30,11 @@ public class CbcRecord : BaseEntity
     public decimal  Bas             { get; set; }
 
     public string   Remarks         { get; set; } = "";
+
+    // Biochemistry panel (nullable — null when panel not run)
+    public decimal? Alt             { get; set; } // ALT/GPT  U/L
+    public decimal? Ast             { get; set; } // AST/GOT  U/L
+    public decimal? Creatinine      { get; set; } // mg/dL
+    public decimal? Urea            { get; set; } // mg/dL
+    public decimal? Bun             { get; set; } // BUN mg/dL
 }

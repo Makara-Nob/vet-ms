@@ -269,11 +269,36 @@ public static class Database
                 eos            NUMERIC(8,2) NOT NULL DEFAULT 0,
                 bas            NUMERIC(8,2) NOT NULL DEFAULT 0,
                 remarks        TEXT NOT NULL DEFAULT '',
+                alt            NUMERIC(10,2),
+                ast            NUMERIC(10,2),
+                creatinine     NUMERIC(10,2),
+                urea           NUMERIC(10,2),
+                bun            NUMERIC(10,2),
                 created_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at     TIMESTAMP,
                 created_by     VARCHAR(100),
                 updated_by     VARCHAR(100),
                 metadata       JSONB
+            );
+
+            ALTER TABLE cbc_records ADD COLUMN IF NOT EXISTS alt        NUMERIC(10,2);
+            ALTER TABLE cbc_records ADD COLUMN IF NOT EXISTS ast        NUMERIC(10,2);
+            ALTER TABLE cbc_records ADD COLUMN IF NOT EXISTS creatinine NUMERIC(10,2);
+            ALTER TABLE cbc_records ADD COLUMN IF NOT EXISTS urea       NUMERIC(10,2);
+            ALTER TABLE cbc_records ADD COLUMN IF NOT EXISTS bun        NUMERIC(10,2);
+
+            ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS name_khmer VARCHAR(300) NOT NULL DEFAULT '';
+
+            CREATE TABLE IF NOT EXISTS clinic_settings (
+                id               SERIAL PRIMARY KEY,
+                name             VARCHAR(300) NOT NULL DEFAULT '',
+                name_khmer       VARCHAR(300) NOT NULL DEFAULT '',
+                address_english  TEXT         NOT NULL DEFAULT '',
+                address_khmer    TEXT         NOT NULL DEFAULT '',
+                phone            VARCHAR(300) NOT NULL DEFAULT '',
+                email            VARCHAR(300) NOT NULL DEFAULT '',
+                social_links     JSONB,
+                updated_at       TIMESTAMP
             );
             """;
         cmd.ExecuteNonQuery();

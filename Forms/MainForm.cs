@@ -1,6 +1,7 @@
 using VetMS.Forms.Admin;
 using VetMS.Forms.MasterData;
 using VetMS.Forms.Operations;
+using VetMS.Forms.Settings;
 using VetMS.Models;
 
 namespace VetMS.Forms;
@@ -231,7 +232,8 @@ public class MainForm : Form
         if (_currentUser.Role == "Administrator")
         {
             AddSection("ADMINISTRATION");
-            AddNav("👤", "User Management", () => LoadForm(new UserForm()));
+            AddNav("👤", "User Management",  () => LoadForm(new UserForm()));
+            AddNav("🏥", "Clinic Settings",  () => LoadForm(new ClinicSettingsForm()));
         }
 
         AddSection("ACCOUNT");

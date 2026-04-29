@@ -167,9 +167,14 @@ public class CbcForm : Form
         {
             if (e.RowIndex < 0 || e.ColumnIndex < 0 || e.Button != MouseButtons.Left) return;
             if (dgv.Columns[e.ColumnIndex].Name != "ColAction") return;
-            UIHelper.HandleDynamicActionColumnClick(dgv, e, ("View", ViewRow), ("Edit", EditRow), ("Delete", DeleteRow));
+            UIHelper.HandleDynamicActionColumnClick(dgv, e, ("View", ViewRow), ("Edit", EditRow), ("Export", ExportRow), ("Delete", DeleteRow));
         };
         dgv.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0 && dgv.Columns[e.ColumnIndex].Name != "ColAction") ViewRow(e.RowIndex); };
+        dgv.CellToolTipTextNeeded += (_, e) =>
+        {
+            if (e.RowIndex >= 0 && dgv.Columns[e.ColumnIndex].Name == "ColAction")
+                e.ToolTipText = "View | Edit | Export PDF | Delete";
+        };
 
         lblNoData = UIHelper.CreateEmptyDataLabel("No CBC records yet.");
         tableBox.Controls.Add(lblNoData);
@@ -270,7 +275,7 @@ public class CbcForm : Form
 
         if (e.RowIndex >= 0 && e.ColumnIndex >= 0 && dgv.Columns[e.ColumnIndex].Name == "ColAction")
         {
-            UIHelper.PaintDynamicActionColumn(dgv, e, "View", "Edit", "Delete");
+            UIHelper.PaintDynamicActionColumn(dgv, e, "View", "Edit", "Export", "Delete");
             return;
         }
     }
@@ -405,6 +410,15 @@ public class CbcForm : Form
         catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
         VetMS.Forms.Toast.Success("Record deleted.");
         LoadData();
+    }
+
+    private void ExportRow(int rowIndex)
+    {
+        if (rowIndex < 0 || rowIndex >= dgv.Rows.Count) return;
+        if (dgv.Rows[rowIndex].Cells["Id"]?.Value is not int id) return;
+        var item = _data.FirstOrDefault(x => x.Id == id);
+        if (item is null) return;
+        VetMS.Helpers.CbcPdfExporter.ShowExportDialog(item);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

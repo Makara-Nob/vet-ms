@@ -1179,10 +1179,31 @@ public class PetDetailsForm : Form
                     Text = $"Remarks: {c.Remarks}",
                     Font = new Font("Segoe UI", 8.5f, FontStyle.Italic),
                     ForeColor = Color.FromArgb(90, 105, 130),
-                    AutoSize = false, Width = leukoPanel.Width - barX - 20, Height = 42,
+                    AutoSize = false, Width = leukoPanel.Width - barX - 160, Height = 42,
                     Left = barX, Top = ly
                 });
             }
+
+            // Export PDF button (right-anchored)
+            var btnPdf = new Button
+            {
+                Text      = "Export PDF",
+                Width     = 110, Height = 32,
+                BackColor = Color.FromArgb(34, 139, 80),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Cursor    = Cursors.Hand,
+                Font      = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                Anchor    = AnchorStyles.Right | AnchorStyles.Top,
+                Top       = (leukoPanel.Height - 32) / 2
+            };
+            btnPdf.FlatAppearance.BorderSize = 0;
+            btnPdf.FlatAppearance.MouseOverBackColor = Color.FromArgb(28, 115, 66);
+            leukoPanel.SizeChanged += (_, _) => btnPdf.Left = leukoPanel.Width - btnPdf.Width - 16;
+            btnPdf.Left = leukoPanel.Width - btnPdf.Width - 16;
+            var captured = c;
+            btnPdf.Click += (_, _) => VetMS.Helpers.CbcPdfExporter.ShowExportDialog(captured);
+            leukoPanel.Controls.Add(btnPdf);
         };
 
         // Double-click → full CBC dialog

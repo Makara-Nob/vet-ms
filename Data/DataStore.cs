@@ -839,7 +839,8 @@ public static class DataStore
         using var conn = Database.OpenConnection();
         using var cmd = new NpgsqlCommand(
             @"SELECT id,pet_id,pet_name,customer_id,customer_name,test_date,
-                     rbc,hgb,hct,mcv,mch,mchc,plt,wbc,neu,lym,mon,eos,bas,remarks,metadata
+                     rbc,hgb,hct,mcv,mch,mchc,plt,wbc,neu,lym,mon,eos,bas,remarks,metadata,
+                     alt,ast,creatinine,urea,bun
               FROM cbc_records ORDER BY test_date DESC", conn);
         using var r = cmd.ExecuteReader();
         while (r.Read())
@@ -865,7 +866,12 @@ public static class DataStore
                 Eos          = r.GetDecimal(17),
                 Bas          = r.GetDecimal(18),
                 Remarks      = r.GetString(19),
-                Metadata     = r.IsDBNull(20) ? null : r.GetString(20)
+                Metadata     = r.IsDBNull(20) ? null : r.GetString(20),
+                Alt          = r.IsDBNull(21) ? null : r.GetDecimal(21),
+                Ast          = r.IsDBNull(22) ? null : r.GetDecimal(22),
+                Creatinine   = r.IsDBNull(23) ? null : r.GetDecimal(23),
+                Urea         = r.IsDBNull(24) ? null : r.GetDecimal(24),
+                Bun          = r.IsDBNull(25) ? null : r.GetDecimal(25),
             });
         return list;
     }
@@ -875,8 +881,10 @@ public static class DataStore
         using var conn = Database.OpenConnection();
         using var cmd = new NpgsqlCommand(
             @"INSERT INTO cbc_records (pet_id,pet_name,customer_id,customer_name,test_date,
-                                        rbc,hgb,hct,mcv,mch,mchc,plt,wbc,neu,lym,mon,eos,bas,remarks,metadata)
-              VALUES (@pid,@pn,@cid,@cn,@td,@rbc,@hgb,@hct,@mcv,@mch,@mchc,@plt,@wbc,@neu,@lym,@mon,@eos,@bas,@rem,@mt) RETURNING id", conn);
+                                        rbc,hgb,hct,mcv,mch,mchc,plt,wbc,neu,lym,mon,eos,bas,remarks,metadata,
+                                        alt,ast,creatinine,urea,bun)
+              VALUES (@pid,@pn,@cid,@cn,@td,@rbc,@hgb,@hct,@mcv,@mch,@mchc,@plt,@wbc,@neu,@lym,@mon,@eos,@bas,@rem,@mt,
+                      @alt,@ast,@creatinine,@urea,@bun) RETURNING id", conn);
         cmd.Parameters.AddWithValue("pid",  item.PetId);
         cmd.Parameters.AddWithValue("pn",   item.PetName);
         cmd.Parameters.AddWithValue("cid",  item.CustomerId);
@@ -896,7 +904,12 @@ public static class DataStore
         cmd.Parameters.AddWithValue("eos",  item.Eos);
         cmd.Parameters.AddWithValue("bas",  item.Bas);
         cmd.Parameters.AddWithValue("rem",  item.Remarks ?? "");
-        cmd.Parameters.Add(new NpgsqlParameter("mt", NpgsqlTypes.NpgsqlDbType.Jsonb) { Value = (object?)item.Metadata ?? DBNull.Value });
+        cmd.Parameters.Add(new NpgsqlParameter("mt",         NpgsqlTypes.NpgsqlDbType.Jsonb)    { Value = (object?)item.Metadata    ?? DBNull.Value });
+        cmd.Parameters.Add(new NpgsqlParameter("alt",        NpgsqlTypes.NpgsqlDbType.Numeric)  { Value = (object?)item.Alt         ?? DBNull.Value });
+        cmd.Parameters.Add(new NpgsqlParameter("ast",        NpgsqlTypes.NpgsqlDbType.Numeric)  { Value = (object?)item.Ast         ?? DBNull.Value });
+        cmd.Parameters.Add(new NpgsqlParameter("creatinine", NpgsqlTypes.NpgsqlDbType.Numeric)  { Value = (object?)item.Creatinine  ?? DBNull.Value });
+        cmd.Parameters.Add(new NpgsqlParameter("urea",       NpgsqlTypes.NpgsqlDbType.Numeric)  { Value = (object?)item.Urea        ?? DBNull.Value });
+        cmd.Parameters.Add(new NpgsqlParameter("bun",        NpgsqlTypes.NpgsqlDbType.Numeric)  { Value = (object?)item.Bun         ?? DBNull.Value });
         item.Id = (int)cmd.ExecuteScalar()!;
     }
 
@@ -906,7 +919,8 @@ public static class DataStore
         using var cmd = new NpgsqlCommand(
             @"UPDATE cbc_records SET pet_id=@pid,pet_name=@pn,customer_id=@cid,customer_name=@cn,test_date=@td,
                 rbc=@rbc,hgb=@hgb,hct=@hct,mcv=@mcv,mch=@mch,mchc=@mchc,plt=@plt,wbc=@wbc,
-                neu=@neu,lym=@lym,mon=@mon,eos=@eos,bas=@bas,remarks=@rem,metadata=@mt::jsonb,updated_at=NOW()
+                neu=@neu,lym=@lym,mon=@mon,eos=@eos,bas=@bas,remarks=@rem,metadata=@mt::jsonb,
+                alt=@alt,ast=@ast,creatinine=@creatinine,urea=@urea,bun=@bun,updated_at=NOW()
               WHERE id=@id", conn);
         cmd.Parameters.AddWithValue("id",   item.Id);
         cmd.Parameters.AddWithValue("pid",  item.PetId);
@@ -928,7 +942,12 @@ public static class DataStore
         cmd.Parameters.AddWithValue("eos",  item.Eos);
         cmd.Parameters.AddWithValue("bas",  item.Bas);
         cmd.Parameters.AddWithValue("rem",  item.Remarks);
-        cmd.Parameters.Add("mt", NpgsqlTypes.NpgsqlDbType.Jsonb).Value = (object?)item.Metadata ?? DBNull.Value;
+        cmd.Parameters.Add("mt",         NpgsqlTypes.NpgsqlDbType.Jsonb).Value   = (object?)item.Metadata   ?? DBNull.Value;
+        cmd.Parameters.Add("alt",        NpgsqlTypes.NpgsqlDbType.Numeric).Value = (object?)item.Alt        ?? DBNull.Value;
+        cmd.Parameters.Add("ast",        NpgsqlTypes.NpgsqlDbType.Numeric).Value = (object?)item.Ast        ?? DBNull.Value;
+        cmd.Parameters.Add("creatinine", NpgsqlTypes.NpgsqlDbType.Numeric).Value = (object?)item.Creatinine ?? DBNull.Value;
+        cmd.Parameters.Add("urea",       NpgsqlTypes.NpgsqlDbType.Numeric).Value = (object?)item.Urea       ?? DBNull.Value;
+        cmd.Parameters.Add("bun",        NpgsqlTypes.NpgsqlDbType.Numeric).Value = (object?)item.Bun        ?? DBNull.Value;
         cmd.ExecuteNonQuery();
     }
 
@@ -938,6 +957,66 @@ public static class DataStore
         using var cmd = new NpgsqlCommand("DELETE FROM cbc_records WHERE id=@id", conn);
         cmd.Parameters.AddWithValue("id", item.Id);
         cmd.ExecuteNonQuery();
+    }
+
+    // ── Clinic Settings ───────────────────────────────────────────────────────
+
+    public static ClinicSettings GetClinicSettings()
+    {
+        using var conn = Database.OpenConnection();
+        using var cmd  = new NpgsqlCommand(
+            "SELECT id,name,name_khmer,address_english,address_khmer,phone,email,social_links FROM clinic_settings LIMIT 1", conn);
+        using var r = cmd.ExecuteReader();
+        if (r.Read())
+            return new ClinicSettings
+            {
+                Id             = r.GetInt32(0),
+                Name           = r.GetString(1),
+                NameKhmer      = r.GetString(2),
+                AddressEnglish = r.GetString(3),
+                AddressKhmer   = r.GetString(4),
+                Phone          = r.GetString(5),
+                Email          = r.GetString(6),
+                SocialLinks    = r.IsDBNull(7) ? [] :
+                    System.Text.Json.JsonSerializer.Deserialize<List<SocialLink>>(r.GetString(7)) ?? []
+            };
+        return new ClinicSettings();
+    }
+
+    public static void SaveClinicSettings(ClinicSettings s)
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(s.SocialLinks);
+        using var conn = Database.OpenConnection();
+        if (s.Id == 0)
+        {
+            using var cmd = new NpgsqlCommand(
+                @"INSERT INTO clinic_settings (name,name_khmer,address_english,address_khmer,phone,email,social_links)
+                  VALUES (@n,@nk,@ae,@ak,@ph,@em,@sl::jsonb) RETURNING id", conn);
+            cmd.Parameters.AddWithValue("n",  s.Name);
+            cmd.Parameters.AddWithValue("nk", s.NameKhmer);
+            cmd.Parameters.AddWithValue("ae", s.AddressEnglish);
+            cmd.Parameters.AddWithValue("ak", s.AddressKhmer);
+            cmd.Parameters.AddWithValue("ph", s.Phone);
+            cmd.Parameters.AddWithValue("em", s.Email);
+            cmd.Parameters.AddWithValue("sl", json);
+            s.Id = (int)cmd.ExecuteScalar()!;
+        }
+        else
+        {
+            using var cmd = new NpgsqlCommand(
+                @"UPDATE clinic_settings SET name=@n,name_khmer=@nk,address_english=@ae,address_khmer=@ak,
+                    phone=@ph,email=@em,social_links=@sl::jsonb,updated_at=NOW()
+                  WHERE id=@id", conn);
+            cmd.Parameters.AddWithValue("id", s.Id);
+            cmd.Parameters.AddWithValue("n",  s.Name);
+            cmd.Parameters.AddWithValue("nk", s.NameKhmer);
+            cmd.Parameters.AddWithValue("ae", s.AddressEnglish);
+            cmd.Parameters.AddWithValue("ak", s.AddressKhmer);
+            cmd.Parameters.AddWithValue("ph", s.Phone);
+            cmd.Parameters.AddWithValue("em", s.Email);
+            cmd.Parameters.AddWithValue("sl", json);
+            cmd.ExecuteNonQuery();
+        }
     }
 }
 

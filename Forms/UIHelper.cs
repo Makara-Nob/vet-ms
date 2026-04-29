@@ -128,6 +128,7 @@ public static class UIHelper
         "Delete"  => Danger,
         "View"    => Success,
         "Recover" => Success,
+        "Export"  => Color.FromArgb(34, 139, 80),
         _         => Accent
     };
 
@@ -218,6 +219,18 @@ public static class UIHelper
                 new(r.X + r.Width / 2 + 4, r.Y),
             };
             g.FillPolygon(brush, tip);
+        }
+        else if (action == "Export")
+        {
+            // Document page with a down-arrow (export/PDF icon)
+            int lx = r.X + 3, ly = r.Y + 1, pw = r.Width - 7, ph = r.Height - 3;
+            g.DrawRectangle(pen, lx, ly, pw, ph);           // page outline
+            g.DrawLine(pen, lx + pw - 4, ly, lx + pw - 4, ly + 4); // fold corner
+            g.DrawLine(pen, lx + pw - 4, ly + 4, lx + pw, ly + 4);
+            // down arrow centred in lower half
+            int ax = r.X + r.Width / 2, ay = r.Y + r.Height / 2 + 1;
+            g.DrawLine(pen, ax, ay - 3, ax, ay + 1);
+            g.FillPolygon(brush, new PointF[] { new(ax - 3, ay), new(ax + 3, ay), new(ax, ay + 4) });
         }
         else
         {

@@ -14,6 +14,8 @@ public class CbcDialog : Form
     private readonly TextBox txtRemarks;
     private readonly List<Pet> _pets;
     private bool _petFiltering;
+    private NumericUpDown nudAlt = null!, nudAst = null!, nudCreatinine = null!, nudUrea = null!, nudBun = null!;
+    private CheckBox chkBiochem = null!;
 
     public CbcRecord Result { get; private set; } = new();
 
@@ -21,7 +23,7 @@ public class CbcDialog : Form
     {
         bool isEdit = existing is not null;
         Text = isEdit ? "Edit CBC Record" : "New CBC Record";
-        Size = new Size(850, 900);
+        Size = new Size(850, 1020);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false;
@@ -114,6 +116,32 @@ public class CbcDialog : Form
         nudBas = NudField(body, "Basophils (%)",   lm + colW3 + gap,       y, colW3, 100);
         y += 70;
 
+        // ── Biochemistry Panel ────────────────────────────────────────────────
+        y = SectionHeader(body, "Biochemistry Panel (optional)", lm, cw, y);
+        chkBiochem = new CheckBox
+        {
+            Text = "Include Biochemistry Results",
+            Left = lm, Top = y, AutoSize = true,
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            ForeColor = Color.FromArgb(60, 75, 95)
+        };
+        body.Controls.Add(chkBiochem); y += 30;
+
+        var biochemPanel = new Panel { Left = lm, Top = y, Width = cw, Height = 138 };
+        nudCreatinine = NudField(biochemPanel, "Creatinine (mg/dL)", 0,                     0, colW3, 50,   2);
+        nudUrea       = NudField(biochemPanel, "Urea (mg/dL)",       colW3 + gap,            0, colW3, 200,  1);
+        nudBun        = NudField(biochemPanel, "BUN (mg/dL)",        (colW3 + gap) * 2,      0, colW3, 200,  2);
+        nudAlt        = NudField(biochemPanel, "ALT/GPT (U/L)",      0,                     68, colW3, 9999, 1);
+        nudAst        = NudField(biochemPanel, "AST/GOT (U/L)",      colW3 + gap,            68, colW3, 9999, 1);
+        body.Controls.Add(biochemPanel); y += 146;
+
+        void UpdateBiochemState()
+        {
+            foreach (Control c in biochemPanel.Controls) c.Enabled = chkBiochem.Checked;
+        }
+        chkBiochem.CheckedChanged += (_, _) => UpdateBiochemState();
+        UpdateBiochemState();
+
         // ── Remarks ───────────────────────────────────────────────────────────
         body.Controls.Add(FieldLabel("Clinical Remarks / Interpretation", lm, y)); y += 22;
         txtRemarks = new TextBox
@@ -165,6 +193,15 @@ public class CbcDialog : Form
             nudPlt.Value  = existing.Plt;  nudWbc.Value  = existing.Wbc;
             nudNeu.Value  = existing.Neu;  nudLym.Value  = existing.Lym;  nudMon.Value  = existing.Mon;
             nudEos.Value  = existing.Eos;  nudBas.Value  = existing.Bas;
+            if (existing.Alt.HasValue || existing.Ast.HasValue || existing.Creatinine.HasValue || existing.Urea.HasValue || existing.Bun.HasValue)
+            {
+                chkBiochem.Checked    = true;
+                nudAlt.Value          = existing.Alt          ?? 0;
+                nudAst.Value          = existing.Ast          ?? 0;
+                nudCreatinine.Value   = existing.Creatinine   ?? 0;
+                nudUrea.Value         = existing.Urea         ?? 0;
+                nudBun.Value          = existing.Bun          ?? 0;
+            }
             txtRemarks.Text = existing.Remarks;
             Result.Id = existing.Id;
         }
@@ -219,7 +256,12 @@ public class CbcDialog : Form
             Plt = nudPlt.Value, Wbc = nudWbc.Value,
             Neu = nudNeu.Value, Lym = nudLym.Value, Mon = nudMon.Value,
             Eos = nudEos.Value, Bas = nudBas.Value,
-            Remarks = txtRemarks.Text.Trim()
+            Remarks    = txtRemarks.Text.Trim(),
+            Alt        = chkBiochem.Checked ? nudAlt.Value        : null,
+            Ast        = chkBiochem.Checked ? nudAst.Value        : null,
+            Creatinine = chkBiochem.Checked ? nudCreatinine.Value : null,
+            Urea       = chkBiochem.Checked ? nudUrea.Value       : null,
+            Bun        = chkBiochem.Checked ? nudBun.Value        : null,
         };
         DialogResult = DialogResult.OK;
     }
@@ -243,7 +285,7 @@ public class CbcDialog : Form
         return y + 24;
     }
 
-    private static NumericUpDown NudField(Panel body, string label, int x, int y, int width, decimal max)
+    private static NumericUpDown NudField(Panel body, string label, int x, int y, int width, decimal max, int decimals = 2)
     {
         body.Controls.Add(new Label
         {
@@ -255,7 +297,7 @@ public class CbcDialog : Form
         {
             Left = x, Top = y + 20, Width = width,
             Font = new Font("Segoe UI", 10f),
-            DecimalPlaces = 2, Maximum = max, Minimum = 0,
+            DecimalPlaces = decimals, Maximum = max, Minimum = 0,
             BorderStyle = BorderStyle.FixedSingle,
             BackColor = Color.FromArgb(250, 251, 253)
         };
@@ -311,7 +353,7 @@ public class CbcViewDialog : Form
     public CbcViewDialog(CbcRecord record)
     {
         Text = "CBC Record — View";
-        Size = new Size(870, 890);
+        Size = new Size(870, 1040);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false;
@@ -388,6 +430,25 @@ public class CbcViewDialog : Form
         ValueCard(body, "Basophils",    "%", record.Bas.ToString("F2"), lm + colW3 + gap,       y, colW3);
         y += 82;
 
+        // ── Biochemistry ──────────────────────────────────────────────────────
+        bool hasBiochem = record.Alt.HasValue || record.Ast.HasValue || record.Creatinine.HasValue || record.Urea.HasValue || record.Bun.HasValue;
+        if (hasBiochem)
+        {
+            y = SectionHeader(body, "Biochemistry Panel", lm, cw, y);
+            if (record.Creatinine.HasValue)
+                ValueCard(body, "Creatinine", "mg/dL", record.Creatinine.Value.ToString("F2"), lm,                     y, colW3);
+            if (record.Urea.HasValue)
+                ValueCard(body, "Urea",       "mg/dL", record.Urea.Value.ToString("F1"),       lm + colW3 + gap,       y, colW3);
+            if (record.Bun.HasValue)
+                ValueCard(body, "BUN",        "mg/dL", record.Bun.Value.ToString("F2"),        lm + (colW3 + gap) * 2, y, colW3);
+            y += 74;
+            if (record.Alt.HasValue)
+                ValueCard(body, "ALT/GPT", "U/L", record.Alt.Value.ToString("F0"), lm,              y, colW3);
+            if (record.Ast.HasValue)
+                ValueCard(body, "AST/GOT", "U/L", record.Ast.Value.ToString("F0"), lm + colW3 + gap, y, colW3);
+            y += 82;
+        }
+
         // ── Remarks ───────────────────────────────────────────────────────────
         if (!string.IsNullOrWhiteSpace(record.Remarks))
         {
@@ -432,15 +493,18 @@ public class CbcViewDialog : Form
             using var pen = new Pen(Color.FromArgb(225, 230, 240));
             e.Graphics.DrawLine(pen, 0, 0, footer.Width, 0);
         };
-        var btnEdit  = DialogButton("Edit",  UIHelper.Accent, 100);
-        var btnClose = DialogButton("Close", Color.FromArgb(108, 117, 125), 100);
-        btnEdit.DialogResult  = DialogResult.Yes;   // caller checks this to open Edit
+        var btnEdit   = DialogButton("Edit",       UIHelper.Accent, 100);
+        var btnExport = DialogButton("Export PDF", Color.FromArgb(34, 139, 80), 115);
+        var btnClose  = DialogButton("Close",      Color.FromArgb(108, 117, 125), 100);
+        btnEdit.DialogResult  = DialogResult.Yes;
         btnClose.DialogResult = DialogResult.Cancel;
-        footer.Controls.AddRange(new Control[] { btnEdit, btnClose });
+        btnExport.Click += (_, _) => ExportPdf(record);
+        footer.Controls.AddRange(new Control[] { btnEdit, btnExport, btnClose });
         footer.Resize += (_, _) =>
         {
-            btnClose.Left = footer.Width - btnClose.Width - 20; btnClose.Top = 13;
-            btnEdit.Left  = btnClose.Left - btnEdit.Width - 10; btnEdit.Top  = 13;
+            btnClose.Left  = footer.Width - btnClose.Width - 20;  btnClose.Top  = 13;
+            btnExport.Left = btnClose.Left - btnExport.Width - 10; btnExport.Top = 13;
+            btnEdit.Left   = btnExport.Left - btnEdit.Width - 10;  btnEdit.Top   = 13;
         };
 
         Controls.Add(body);
@@ -448,6 +512,10 @@ public class CbcViewDialog : Form
         Controls.Add(header);
         CancelButton = btnClose;
     }
+
+    // ── PDF export ────────────────────────────────────────────────────────────
+    private static void ExportPdf(CbcRecord record) =>
+        VetMS.Helpers.CbcPdfExporter.ShowExportDialog(record);
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     private static void InfoItem(Panel banner, string label, string value, int x)
