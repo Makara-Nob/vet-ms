@@ -1,253 +1,1015 @@
 using VetMS.Data;
 using VetMS.Models;
+using System.Drawing.Drawing2D;
 
 namespace VetMS.Forms.Operations;
 
 public class PetDetailsForm : Form
 {
     private readonly Pet _pet;
+    private readonly Action? _onBack;
+    private readonly int _startTab;
 
-    public PetDetailsForm(Pet pet)
+    // Live summary data
+    private int _totalVisits;
+    private int _totalCbc;
+    private string _lastVisitStr = "—";
+    private string _nextApptStr  = "—";
+
+    public PetDetailsForm(Pet pet, Action? onBack = null, int startTab = 0)
     {
-        _pet = pet;
-        BuildForm();
+        _pet      = pet;
+        _onBack   = onBack;
+        _startTab = startTab;
+        PreloadCounts();
+        InitializeUI();
     }
 
-    private void BuildForm()
+    // ── Pre-load summary counts so stat cards render correctly ────────────────
+    private void PreloadCounts()
     {
-        Text = $"Patient Chart - {_pet.Name}";
-        Size = new Size(950, 760);
-        StartPosition = FormStartPosition.CenterParent;
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        MaximizeBox = false;
-        MinimizeBox = false;
-        BackColor = Color.White;
+        var records = DataStore.GetMedicalRecords().Where(r => r.PetId == _pet.Id).ToList();
+        _totalVisits = records.Count;
 
-        var content = new Panel
+        var lastRecord = records.OrderByDescending(r => r.CreatedAt).FirstOrDefault();
+        if (lastRecord != null)
+            _lastVisitStr = lastRecord.CreatedAt.ToString("MMM d, yyyy");
+
+        var appts = DataStore.GetAppointments()
+            .Where(a => a.PetId == _pet.Id && a.AppointmentDate >= DateTime.Today && a.Status == "Scheduled")
+            .OrderBy(a => a.AppointmentDate)
+            .FirstOrDefault();
+        if (appts != null)
+            _nextApptStr = appts.AppointmentDate.ToString("MMM d, yyyy");
+
+        _totalCbc = DataStore.GetCbcRecords().Count(c => c.PetId == _pet.Id);
+    }
+
+    private void InitializeUI()
+    {
+        Text = $"Patient Profile — {_pet.Name}";
+        BackColor = Color.FromArgb(245, 247, 250);
+        FormBorderStyle = FormBorderStyle.None;
+        Dock = DockStyle.Fill;
+
+        // Root layout: Sidebar | Content
+        var root = new Panel { Dock = DockStyle.Fill };
+
+        root.Controls.Add(BuildContent());
+        root.Controls.Add(BuildSidebar());
+        Controls.Add(root);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // SIDEBAR
+    // ════════════════════════════════════════════════════════════════════════
+    private Panel BuildSidebar()
+    {
+        var sidebar = new Panel
         {
-            Dock = DockStyle.Fill,
-            Padding = new Padding(20)
+            Width     = 288,
+            Dock      = DockStyle.Left,
+            BackColor = Color.White
+        };
+        // Right border
+        sidebar.Paint += (_, e) =>
+        {
+            using var pen = new Pen(Color.FromArgb(226, 229, 235), 1);
+            e.Graphics.DrawLine(pen, sidebar.Width - 1, 0, sidebar.Width - 1, sidebar.Height);
         };
 
-        var footer = BuildFooter();
-
-        content.Controls.Add(BuildTabs());
-        content.Controls.Add(BuildHeader());
-
-        Controls.Add(content);
-        Controls.Add(footer);
-    }
-
-    private Panel BuildFooter()
-    {
-        var footer = new Panel
+        // ── Profile Header ─────────────────────────────────────────────────
+        var headerHeight = 200;
+        var header = new Panel { Dock = DockStyle.Top, Height = headerHeight };
+        header.Paint += (_, e) =>
         {
-            Dock = DockStyle.Bottom,
-            Height = 60,
-            BackColor = UIHelper.LightBg
+            using var brush = new LinearGradientBrush(
+                new Rectangle(0, 0, header.Width, header.Height),
+                Theme.AppTheme.Primary,
+                Theme.AppTheme.BrandDeep,
+                LinearGradientMode.Vertical);
+            e.Graphics.FillRectangle(brush, 0, 0, header.Width, header.Height);
         };
 
-        var btnClose = UIHelper.CreateButton("Close", Color.Gray, 100);
-        btnClose.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        btnClose.Location = new Point(820, 14);
-        btnClose.DialogResult = DialogResult.OK;
+        // Avatar
+        int avatarSize = 90;
+        var picAvatar = new PictureBox
+        {
+            Width     = avatarSize,
+            Height    = avatarSize,
+            SizeMode  = PictureBoxSizeMode.Zoom,
+            BackColor = Color.FromArgb(240, 245, 250)
+        };
+        picAvatar.Image = UIHelper.CreateProfilePlaceholder(avatarSize);
+        if (_pet.ProfilePicture is { Length: > 0 })
+        {
+            using var ms = new MemoryStream(_pet.ProfilePicture);
+            picAvatar.Image = Image.FromStream(ms);
+        }
+        var clipPath = new GraphicsPath();
+        clipPath.AddEllipse(0, 0, avatarSize, avatarSize);
+        picAvatar.Region = new Region(clipPath);
+        UIHelper.AttachImageViewer(picAvatar, () => picAvatar.Image);
 
-        footer.Controls.Add(btnClose);
-        return footer;
+        header.Controls.Add(picAvatar);
+
+        var lblName = new Label
+        {
+            Text      = _pet.Name,
+            Font      = new Font("Segoe UI", 13f, FontStyle.Bold),
+            ForeColor = Color.White,
+            TextAlign = ContentAlignment.MiddleCenter,
+            Width     = 260
+        };
+
+        // Status badge
+        bool active = _pet.IsActive;
+        var lblStatus = new Label
+        {
+            Text      = active ? "  ACTIVE  " : "  INACTIVE  ",
+            Font      = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+            ForeColor = Color.White,
+            BackColor = active ? Theme.AppTheme.Success : Theme.AppTheme.Danger,
+            AutoSize  = true,
+            Padding   = new Padding(8, 3, 8, 3)
+        };
+        lblStatus.Paint += (_, e) =>
+        {
+            using var path = RoundRect(new Rectangle(0, 0, lblStatus.Width, lblStatus.Height), 10);
+            using var brush = new SolidBrush(lblStatus.BackColor);
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            e.Graphics.FillPath(brush, path);
+            using var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+            using var fg = new SolidBrush(Color.White);
+            e.Graphics.DrawString(lblStatus.Text, lblStatus.Font, fg,
+                new RectangleF(0, 0, lblStatus.Width, lblStatus.Height), sf);
+        };
+        lblStatus.BackColor = Color.Transparent; // let Paint handle background
+
+        header.Resize += (_, _) =>
+        {
+            picAvatar.Left = (header.Width - avatarSize) / 2;
+            picAvatar.Top  = 28;
+            lblName.Left   = (header.Width - lblName.Width) / 2;
+            lblName.Top    = picAvatar.Bottom + 8;
+            lblStatus.Left = (header.Width - lblStatus.Width) / 2;
+            lblStatus.Top  = lblName.Bottom + 4;
+        };
+        header.Controls.Add(lblName);
+        header.Controls.Add(lblStatus);
+        sidebar.Controls.Add(header);
+
+        // ── Info Rows ──────────────────────────────────────────────────────
+        var scroll = new Panel
+        {
+            Dock      = DockStyle.Fill,
+            AutoScroll = true,
+            Padding   = new Padding(0, 0, 0, 16)
+        };
+
+        var stack = new FlowLayoutPanel
+        {
+            Dock          = DockStyle.Top,
+            AutoSize      = true,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents  = false,
+            Padding       = new Padding(20, 16, 20, 0)
+        };
+
+        void AddSection(string title)
+        {
+            var lbl = new Label
+            {
+                Text      = title.ToUpperInvariant(),
+                Font      = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(160, 170, 185),
+                AutoSize  = true,
+                Margin    = new Padding(0, 16, 0, 6)
+            };
+            stack.Controls.Add(lbl);
+        }
+
+        void AddRow(string label, string value, Color? valueColor = null)
+        {
+            var row = new Panel { Width = 248, Height = 44, Margin = new Padding(0, 0, 0, 2) };
+
+            row.Paint += (_, e) =>
+            {
+                e.Graphics.Clear(Color.White);
+                using var pen = new Pen(Color.FromArgb(241, 243, 246));
+                e.Graphics.DrawLine(pen, 0, row.Height - 1, row.Width, row.Height - 1);
+            };
+
+            var lbl = new Label
+            {
+                Text     = label,
+                Font     = new Font("Segoe UI", 8.5f),
+                ForeColor = Color.FromArgb(140, 150, 165),
+                Left     = 0, Top = 6,
+                AutoSize = true
+            };
+            var val = new Label
+            {
+                Text      = string.IsNullOrEmpty(value) ? "—" : value,
+                Font      = new Font("Segoe UI", 9.5f, FontStyle.Regular),
+                ForeColor = valueColor ?? Color.FromArgb(35, 45, 65),
+                Left      = 0, Top = 23,
+                AutoSize  = true,
+                MaximumSize = new Size(248, 0)
+            };
+            row.Controls.Add(lbl);
+            row.Controls.Add(val);
+            stack.Controls.Add(row);
+        }
+
+        AddSection("Patient Info");
+        AddRow("Species / Breed", $"{_pet.SpeciesName} · {(_pet.BreedName ?? "Mix")}");
+        AddRow("Gender", _pet.Gender);
+        AddRow("Age / DOB", GetAgeWithDate());
+        AddRow("Weight", $"{_pet.Weight:F2} kg");
+        AddRow("Color / Coat", string.IsNullOrWhiteSpace(_pet.Color) ? "—" : _pet.Color);
+        AddRow("Microchip", string.IsNullOrWhiteSpace(_pet.MicrochipNo) ? "None" : _pet.MicrochipNo);
+
+        AddSection("Owner");
+        AddRow("Full Name", _pet.CustomerName);
+
+        var customer = DataStore.GetCustomers().FirstOrDefault(c => c.Id == _pet.CustomerId);
+        if (customer != null)
+        {
+            AddRow("Phone", customer.Phone);
+            AddRow("Email", string.IsNullOrEmpty(customer.Email) ? "—" : customer.Email);
+        }
+
+        AddSection("Record");
+        AddRow("Created", _pet.CreatedAt.ToString("MMM d, yyyy"));
+        AddRow("Created By", _pet.CreatedBy ?? "—");
+        if (_pet.UpdatedAt.HasValue)
+            AddRow("Last Updated", _pet.UpdatedAt.Value.ToString("MMM d, yyyy"));
+
+        scroll.Controls.Add(stack);
+        sidebar.Controls.Add(scroll);
+        return sidebar;
     }
 
-    private Control BuildHeader()
+    // ════════════════════════════════════════════════════════════════════════
+    // MAIN CONTENT
+    // ════════════════════════════════════════════════════════════════════════
+    private Panel BuildContent()
+    {
+        var content = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(245, 247, 250) };
+
+        // ── Top Bar ────────────────────────────────────────────────────────
+        var topBar = new Panel
+        {
+            Dock      = DockStyle.Top,
+            Height    = 56,
+            BackColor = Color.White,
+            Padding   = new Padding(16, 0, 16, 0)
+        };
+        topBar.Paint += (_, e) =>
+        {
+            using var pen = new Pen(Color.FromArgb(226, 229, 235));
+            e.Graphics.DrawLine(pen, 0, topBar.Height - 1, topBar.Width, topBar.Height - 1);
+        };
+
+        var btnBack = new Button
+        {
+            Text      = "← Back to Patients",
+            Font      = new Font("Segoe UI", 9f),
+            ForeColor = Color.FromArgb(70, 80, 100),
+            BackColor = Color.Transparent,
+            FlatStyle = FlatStyle.Flat,
+            AutoSize  = true,
+            Cursor    = Cursors.Hand,
+            Top       = 14
+        };
+        btnBack.FlatAppearance.BorderSize = 0;
+        btnBack.Click += (_, _) => _onBack?.Invoke();
+
+        var lblBreadcrumb = new Label
+        {
+            Text      = $"Patients  /  {_pet.Name}",
+            Font      = new Font("Segoe UI", 9f),
+            ForeColor = Color.FromArgb(140, 150, 165),
+            AutoSize  = true,
+            Top       = 20
+        };
+
+        // Quick action buttons
+        var btnNewRecord = CreateTopBtn("+ Medical Record", Theme.AppTheme.Primary);
+        btnNewRecord.Click += (_, _) =>
+        {
+            using var dlg = new MedicalRecordDialog();
+            dlg.ShowDialog();
+        };
+
+        var btnNewAppt = CreateTopBtn("+ Appointment", Theme.AppTheme.Accent);
+        btnNewAppt.Click += (_, _) =>
+        {
+            using var dlg = new AppointmentDialog();
+            if (dlg.ShowDialog() == DialogResult.OK)
+                Toast.Success("Appointment scheduled.");
+        };
+
+        var btnNewCbc = CreateTopBtn("+ CBC", Theme.AppTheme.Success);
+        btnNewCbc.Click += (_, _) =>
+        {
+            using var dlg = new CbcDialog();
+            dlg.ShowDialog();
+        };
+
+        topBar.Controls.Add(btnBack);
+        topBar.Controls.Add(lblBreadcrumb);
+        topBar.Controls.Add(btnNewRecord);
+        topBar.Controls.Add(btnNewAppt);
+        topBar.Controls.Add(btnNewCbc);
+
+        topBar.Resize += (_, _) =>
+        {
+            btnBack.Left       = 8;
+            btnBack.Top        = (topBar.Height - btnBack.Height) / 2;
+            lblBreadcrumb.Left = btnBack.Right + 12;
+            lblBreadcrumb.Top  = (topBar.Height - lblBreadcrumb.Height) / 2;
+
+            btnNewCbc.Left    = topBar.Width - btnNewCbc.Width - 16;
+            btnNewCbc.Top     = (topBar.Height - btnNewCbc.Height) / 2;
+            btnNewAppt.Left   = btnNewCbc.Left - btnNewAppt.Width - 8;
+            btnNewAppt.Top    = btnNewCbc.Top;
+            btnNewRecord.Left = btnNewAppt.Left - btnNewRecord.Width - 8;
+            btnNewRecord.Top  = btnNewAppt.Top;
+        };
+
+        content.Controls.Add(topBar);
+
+        // ── Stat Cards ─────────────────────────────────────────────────────
+        var statsRow = new Panel
+        {
+            Dock      = DockStyle.Top,
+            Height    = 100,
+            BackColor = Color.FromArgb(245, 247, 250),
+            Padding   = new Padding(16, 12, 16, 0)
+        };
+
+        var statsFlow = new FlowLayoutPanel
+        {
+            Dock          = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents  = false
+        };
+
+        statsFlow.Controls.Add(BuildStatCard("Total Visits",    _totalVisits.ToString(),  "medical records",    Theme.AppTheme.Primary));
+        statsFlow.Controls.Add(BuildStatCard("Last Visit",       _lastVisitStr,            "most recent record", Color.FromArgb(0, 120, 215)));
+        statsFlow.Controls.Add(BuildStatCard("Next Appointment", _nextApptStr,             "upcoming scheduled", Theme.AppTheme.Warning));
+        statsFlow.Controls.Add(BuildStatCard("CBC Tests",        _totalCbc.ToString(),     "lab results total",  Theme.AppTheme.Success));
+        statsRow.Controls.Add(statsFlow);
+        content.Controls.Add(statsRow);
+
+        // ── Tabs ───────────────────────────────────────────────────────────
+        var tabWrapper = new Panel
+        {
+            Dock      = DockStyle.Fill,
+            BackColor = Color.FromArgb(245, 247, 250),
+            Padding   = new Padding(16, 12, 16, 16)
+        };
+
+        var tabs = BuildStyledTabs();
+        tabs.Dock = DockStyle.Fill;
+        tabWrapper.Controls.Add(tabs);
+        content.Controls.Add(tabWrapper);
+
+        return content;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // STAT CARDS
+    // ════════════════════════════════════════════════════════════════════════
+    private Panel BuildStatCard(string title, string value, string sub, Color accent)
     {
         var card = new Panel
         {
-            Dock = DockStyle.Top,
-            Height = 170,
-            BackColor = UIHelper.LightBg,
-            Padding = new Padding(20)
+            Width     = 182,
+            Height    = 76,
+            BackColor = Color.White,
+            Margin    = new Padding(0, 0, 10, 0),
+            Cursor    = Cursors.Default
+        };
+        card.Paint += (_, e) =>
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using var borderPath = RoundRect(new Rectangle(0, 0, card.Width - 1, card.Height - 1), 8);
+            using var borderPen  = new Pen(Color.FromArgb(226, 229, 235));
+            e.Graphics.DrawPath(borderPen, borderPath);
+            // Left accent bar
+            using var accentBrush = new SolidBrush(accent);
+            e.Graphics.FillRectangle(accentBrush, 0, 14, 3, card.Height - 28);
         };
 
-        var picture = BuildPetPicture();
-        var patientInfo = BuildPatientInfo();
-        var ownerInfo = BuildOwnerInfo();
+        var lblValue = new Label
+        {
+            Text      = value,
+            Font      = new Font("Segoe UI", 18f, FontStyle.Bold),
+            ForeColor = Color.FromArgb(30, 40, 60),
+            AutoSize  = true,
+            Left      = 18, Top = 12
+        };
+        var lblTitle = new Label
+        {
+            Text      = title,
+            Font      = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            ForeColor = Color.FromArgb(80, 90, 110),
+            AutoSize  = true,
+            Left      = 18, Top = lblValue.Bottom + 2
+        };
+        var lblSub = new Label
+        {
+            Text      = sub,
+            Font      = new Font("Segoe UI", 7.5f),
+            ForeColor = Color.FromArgb(160, 170, 185),
+            AutoSize  = true,
+            Left      = 18, Top = lblTitle.Bottom + 1
+        };
 
-        card.Controls.Add(picture);
-        card.Controls.Add(patientInfo);
-        card.Controls.Add(ownerInfo);
+        card.Controls.Add(lblValue);
+        card.Controls.Add(lblTitle);
+        card.Controls.Add(lblSub);
 
+        // Layout after add (auto-size needs parent)
+        card.Controls[0].Left = 18; card.Controls[0].Top = 10;
         return card;
     }
 
-    private PictureBox BuildPetPicture()
-    {
-        var pic = new PictureBox
-        {
-            Size = new Size(100, 100),
-            Location = new Point(20, 25),
-            SizeMode = PictureBoxSizeMode.Zoom,
-            BorderStyle = BorderStyle.FixedSingle,
-            BackColor = Color.White
-        };
-
-        if (_pet.ProfilePicture?.Length > 0)
-        {
-            using var ms = new MemoryStream(_pet.ProfilePicture);
-            pic.Image = Image.FromStream(ms);
-        }
-        else
-        {
-            pic.Image = UIHelper.CreateAvatar(_pet.Name, 100);
-        }
-
-        UIHelper.AttachImageViewer(pic, () => pic.Image);
-
-        return pic;
-    }
-
-    private Control BuildPatientInfo()
-    {
-        var age = GetAge();
-
-        var lbl = new Label
-        {
-            AutoSize = true,
-            Location = new Point(140, 22),
-            Font = new Font("Segoe UI", 10),
-            ForeColor = Color.Black,
-            Text =
-                $"{_pet.Name}\n" +
-                $"{_pet.SpeciesName} | {_pet.BreedName} | {_pet.Gender}\n" +
-                $"Age: {age} | Weight: {_pet.Weight} kg | Color: {_pet.Color}\n" +
-                $"Status: {(_pet.IsActive ? "Active" : "Inactive")}"
-        };
-
-        return lbl;
-    }
-
-    private Control BuildOwnerInfo()
-    {
-        var lbl = new Label
-        {
-            AutoSize = true,
-            Location = new Point(540, 35),
-            Font = new Font("Segoe UI", 10),
-            ForeColor = UIHelper.Primary,
-            Text =
-                $"Owner: {_pet.CustomerName}\n" +
-                $"Microchip: {(string.IsNullOrWhiteSpace(_pet.MicrochipNo) ? "None" : _pet.MicrochipNo)}"
-        };
-
-        return lbl;
-    }
-
-    private TabControl BuildTabs()
+    // ════════════════════════════════════════════════════════════════════════
+    // TABS
+    // ════════════════════════════════════════════════════════════════════════
+    private TabControl BuildStyledTabs()
     {
         var tabs = new TabControl
         {
-            Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI", 9.5f)
+            Font    = new Font("Segoe UI", 9.5f),
+            Padding = new Point(18, 8),
+            DrawMode = TabDrawMode.OwnerDrawFixed,
+            ItemSize = new Size(0, 36)
         };
+        tabs.DrawItem += DrawTabItem;
 
-        tabs.TabPages.Add(CreateTab("Appointments", BuildAppointmentsGrid()));
-        tabs.TabPages.Add(CreateTab("Medical Records", BuildMedicalRecordsGrid()));
-        tabs.TabPages.Add(CreateTab("CBC Results", BuildCbcGrid()));
+        tabs.TabPages.Add(MakeTabPage("Overview",        BuildOverview()));
+        tabs.TabPages.Add(MakeTabPage("Medical Records", BuildMedicalRecords()));
+        tabs.TabPages.Add(MakeTabPage("Appointments",    BuildAppointments()));
+        tabs.TabPages.Add(MakeTabPage("CBC Results",     BuildCbcResults()));
+        tabs.TabPages.Add(MakeTabPage("Medications",     BuildMedications()));
+        tabs.TabPages.Add(MakeTabPage("Notes",           BuildNotes()));
+
+        if (_startTab >= 0 && _startTab < tabs.TabCount)
+            tabs.SelectedIndex = _startTab;
 
         return tabs;
     }
 
-    private TabPage CreateTab(string title, Control content)
+    private static void DrawTabItem(object? sender, DrawItemEventArgs e)
     {
-        var page = new TabPage(title);
-        page.Controls.Add(content);
+        if (sender is not TabControl tc) return;
+        var page = tc.TabPages[e.Index];
+        bool selected = e.Index == tc.SelectedIndex;
+
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        e.Graphics.FillRectangle(new SolidBrush(selected ? Color.White : Color.FromArgb(248, 249, 251)), e.Bounds);
+
+        if (selected)
+        {
+            using var pen = new Pen(Theme.AppTheme.Primary, 2.5f);
+            e.Graphics.DrawLine(pen, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
+        }
+
+        var textColor = selected ? Theme.AppTheme.Primary : Color.FromArgb(100, 110, 130);
+        using var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+        e.Graphics.DrawString(page.Text, new Font("Segoe UI", 9.5f, selected ? FontStyle.Bold : FontStyle.Regular),
+            new SolidBrush(textColor), e.Bounds, sf);
+    }
+
+    private static TabPage MakeTabPage(string title, Control body)
+    {
+        var page = new TabPage(title) { BackColor = Color.White, Padding = new Padding(0) };
+        body.Dock = DockStyle.Fill;
+        page.Controls.Add(body);
         return page;
     }
 
-    private DataGridView CreateGrid()
+    // ════════════════════════════════════════════════════════════════════════
+    // TAB 1: OVERVIEW – Timeline of all recent events
+    // ════════════════════════════════════════════════════════════════════════
+    private Control BuildOverview()
     {
-        var grid = new DataGridView
+        var container = new Panel { BackColor = Color.White, Padding = new Padding(20, 16, 20, 16) };
+
+        var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+        var stack  = new FlowLayoutPanel
         {
-            Dock = DockStyle.Fill,
-            ReadOnly = true,
-            AllowUserToAddRows = false,
-            AllowUserToDeleteRows = false,
-            AllowUserToResizeRows = false,
-            RowHeadersVisible = false,
-            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-            SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-            BackgroundColor = Color.White
+            Dock          = DockStyle.Top,
+            AutoSize      = true,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents  = false,
+            Padding       = new Padding(0, 0, 0, 20)
         };
 
-        UIHelper.StyleGrid(grid);
-        return grid;
-    }
+        var sectionLabel = new Label
+        {
+            Text      = "RECENT ACTIVITY  •  Last 30 events",
+            Font      = new Font("Segoe UI", 8f, FontStyle.Bold),
+            ForeColor = Color.FromArgb(140, 155, 175),
+            AutoSize  = true,
+            Margin    = new Padding(0, 0, 0, 12)
+        };
+        stack.Controls.Add(sectionLabel);
 
-    private Control BuildAppointmentsGrid()
-    {
-        var grid = CreateGrid();
+        // Collect timeline events from all sources
+        var events = new List<(DateTime Date, string Kind, string Title, string Detail, Color Accent)>();
 
-        grid.DataSource = DataStore.GetAppointments()
-            .Where(a => a.PetId == _pet.Id)
-            .OrderByDescending(a => a.AppointmentDate)
-            .Select(a => new
+        foreach (var r in DataStore.GetMedicalRecords().Where(r => r.PetId == _pet.Id))
+            events.Add((r.CreatedAt, "MedRec", $"Medical Record — {r.VetName}", r.Diagnosis, Theme.AppTheme.Primary));
+
+        foreach (var a in DataStore.GetAppointments().Where(a => a.PetId == _pet.Id))
+        {
+            var accent = a.Status switch
             {
-                Date = a.AppointmentDate.ToString("yyyy-MM-dd HH:mm"),
-                Vet = a.VetName,
-                Service = a.ServiceTypeName,
-                Status = a.Status
-            })
-            .ToList();
+                "Completed"   => Theme.AppTheme.Success,
+                "Cancelled"   => Theme.AppTheme.Danger,
+                "In Progress" => Theme.AppTheme.Warning,
+                _             => Theme.AppTheme.Accent
+            };
+            events.Add((a.AppointmentDate, "Appt", $"Appointment — {a.ServiceTypeName}", $"{a.Status}  ·  {a.VetName}", accent));
+        }
 
-        return grid;
+        foreach (var c in DataStore.GetCbcRecords().Where(c => c.PetId == _pet.Id))
+            events.Add((c.TestDate, "CBC", "CBC / Blood Test", $"WBC {c.Wbc}  ·  RBC {c.Rbc}  ·  HGB {c.Hgb}", Color.FromArgb(142, 36, 170)));
+
+        var sorted = events.OrderByDescending(e => e.Date).Take(30).ToList();
+
+        if (sorted.Count == 0)
+        {
+            stack.Controls.Add(new Label
+            {
+                Text      = "No activity recorded yet for this patient.",
+                Font      = new Font("Segoe UI", 11f, FontStyle.Italic),
+                ForeColor = Color.FromArgb(160, 170, 185),
+                AutoSize  = true,
+                Margin    = new Padding(0, 20, 0, 0)
+            });
+        }
+        else
+        {
+            string? lastYear = null;
+            foreach (var ev in sorted)
+            {
+                string yearGroup = ev.Date.ToString("MMMM yyyy");
+                if (yearGroup != lastYear)
+                {
+                    lastYear = yearGroup;
+                    var yearLbl = new Label
+                    {
+                        Text      = yearGroup.ToUpperInvariant(),
+                        Font      = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+                        ForeColor = Color.FromArgb(160, 170, 185),
+                        AutoSize  = true,
+                        Margin    = new Padding(0, 14, 0, 4)
+                    };
+                    stack.Controls.Add(yearLbl);
+                }
+                stack.Controls.Add(BuildTimelineRow(ev.Date, ev.Kind, ev.Title, ev.Detail, ev.Accent));
+            }
+        }
+
+        scroll.Controls.Add(stack);
+        container.Controls.Add(scroll);
+        return container;
     }
 
-    private Control BuildMedicalRecordsGrid()
+    private Panel BuildTimelineRow(DateTime date, string kind, string title, string detail, Color accent)
     {
-        var grid = CreateGrid();
+        int rowHeight = 64;
+        var row = new Panel
+        {
+            Width     = 720,
+            Height    = rowHeight,
+            Margin    = new Padding(0, 0, 0, 4),
+            BackColor = Color.White,
+            Cursor    = Cursors.Hand
+        };
 
-        grid.DataSource = DataStore.GetMedicalRecords()
+        // Hover highlight
+        row.MouseEnter += (_, _) => row.BackColor = Color.FromArgb(250, 251, 253);
+        row.MouseLeave += (_, _) => row.BackColor = Color.White;
+
+        row.Paint += (_, e) =>
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using var path   = RoundRect(new Rectangle(0, 0, row.Width - 2, row.Height - 1), 8);
+            using var border = new Pen(Color.FromArgb(235, 238, 242));
+            e.Graphics.DrawPath(border, path);
+            // Accent dot + line
+            int cx = 16, cy = row.Height / 2;
+            using var dotBrush = new SolidBrush(accent);
+            e.Graphics.FillEllipse(dotBrush, cx - 5, cy - 5, 10, 10);
+        };
+
+        // Kind badge
+        string kindLabel = kind switch
+        {
+            "MedRec" => "VISIT",
+            "Appt"   => "APPT",
+            "CBC"    => "CBC",
+            _        => kind.ToUpper()
+        };
+        var badge = new Label
+        {
+            Text      = kindLabel,
+            Font      = new Font("Segoe UI", 6.5f, FontStyle.Bold),
+            ForeColor = accent,
+            BackColor = Color.FromArgb(20, accent.R, accent.G, accent.B),
+            AutoSize  = true,
+            Padding   = new Padding(6, 2, 6, 2),
+            Left      = 36, Top = 14
+        };
+
+        var lblDate = new Label
+        {
+            Text      = date.ToString("MMM d"),
+            Font      = new Font("Segoe UI", 8f),
+            ForeColor = Color.FromArgb(140, 155, 175),
+            AutoSize  = true,
+            Left      = badge.Right + 10, Top = 15
+        };
+        var lblTitle = new Label
+        {
+            Text      = title,
+            Font      = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+            ForeColor = Color.FromArgb(30, 40, 60),
+            AutoSize  = true,
+            Left      = 36, Top = 34
+        };
+        var lblDetail = new Label
+        {
+            Text      = detail,
+            Font      = new Font("Segoe UI", 8.5f),
+            ForeColor = Color.FromArgb(110, 120, 140),
+            AutoSize  = true,
+            Left      = lblTitle.Left + 0, Top = 34
+        };
+
+        // Layout after adding so AutoSize is accurate
+        row.Controls.Add(badge);
+        row.Controls.Add(lblDate);
+        row.Controls.Add(lblTitle);
+        row.Controls.Add(lblDetail);
+
+        // Fix layout on parent set
+        row.Layout += (_, _) =>
+        {
+            badge.Left    = 36; badge.Top = 11;
+            lblDate.Left  = badge.Right + 8; lblDate.Top = 13;
+            lblTitle.Left = 36; lblTitle.Top = 33;
+            lblDetail.Left = lblTitle.Right + 10; lblDetail.Top = 36;
+        };
+
+        return row;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // TAB 2: MEDICAL RECORDS
+    // ════════════════════════════════════════════════════════════════════════
+    private Control BuildMedicalRecords()
+    {
+        var wrapper = new Panel { BackColor = Color.White, Padding = new Padding(0) };
+
+        // Toolbar within tab
+        var bar = new Panel { Dock = DockStyle.Top, Height = 52, BackColor = Color.White, Padding = new Padding(16, 10, 16, 0) };
+        bar.Paint += (_, e) => { using var p = new Pen(Color.FromArgb(235, 238, 242)); e.Graphics.DrawLine(p, 0, bar.Height - 1, bar.Width, bar.Height - 1); };
+        var lbl = new Label { Text = "All medical visits and diagnoses for this patient", Font = new Font("Segoe UI", 8.5f), ForeColor = Color.FromArgb(120, 130, 150), AutoSize = true, Top = 16, Left = 16 };
+        bar.Controls.Add(lbl);
+        wrapper.Controls.Add(bar);
+
+        var grid = CreateStyledGrid();
+        grid.Dock = DockStyle.Fill;
+
+        var records = DataStore.GetMedicalRecords()
             .Where(r => r.PetId == _pet.Id)
             .OrderByDescending(r => r.CreatedAt)
             .Select(r => new
             {
-                Date = r.CreatedAt.ToString("yyyy-MM-dd"),
-                Vet = r.VetName,
+                r.Id,
+                Date      = r.CreatedAt.ToString("yyyy-MM-dd"),
+                Vet       = r.VetName,
                 Diagnosis = r.Diagnosis,
-                FollowUp = r.FollowUpDate?.ToString("yyyy-MM-dd") ?? "-"
-            })
-            .ToList();
+                Treatment = r.Treatment,
+                FollowUp  = r.FollowUpDate?.ToString("yyyy-MM-dd") ?? "—",
+                Notes     = string.IsNullOrWhiteSpace(r.Notes) ? "—" : r.Notes
+            }).ToList();
 
-        return grid;
+        grid.DataSource = records;
+        if (grid.Columns["Id"]    != null) grid.Columns["Id"].Visible    = false;
+        if (grid.Columns["Notes"] != null) { grid.Columns["Notes"].MinimumWidth = 120; grid.Columns["Notes"].ToolTipText = "Double-click row to view full record"; }
+
+        ApplyColumnWidths(grid, ("Date", 95), ("Vet", 130), ("Diagnosis", 0), ("Treatment", 0), ("FollowUp", 95), ("Notes", 140));
+
+        AddEmptyOverlay(grid, "No medical records yet.\nClick \"+ Medical Record\" above to add one.");
+
+        grid.CellDoubleClick += (_, e) =>
+        {
+            if (e.RowIndex < 0) return;
+            int id  = (int)grid.Rows[e.RowIndex].Cells["Id"].Value;
+            var rec = DataStore.GetMedicalRecords().FirstOrDefault(x => x.Id == id);
+            if (rec != null) { using var dlg = new MedicalRecordDialog(rec, true); dlg.ShowDialog(); }
+        };
+
+        wrapper.Controls.Add(grid);
+        return wrapper;
     }
 
-    private Control BuildCbcGrid()
+    // ════════════════════════════════════════════════════════════════════════
+    // TAB 3: APPOINTMENTS
+    // ════════════════════════════════════════════════════════════════════════
+    private Control BuildAppointments()
     {
-        var grid = CreateGrid();
+        var wrapper = new Panel { BackColor = Color.White };
+        var bar = BuildTabSubHeader("All appointments — past and upcoming");
+        wrapper.Controls.Add(bar);
 
-        grid.DataSource = DataStore.GetCbcRecords()
+        var grid = CreateStyledGrid();
+        grid.Dock = DockStyle.Fill;
+
+        var appts = DataStore.GetAppointments()
+            .Where(a => a.PetId == _pet.Id)
+            .OrderByDescending(a => a.AppointmentDate)
+            .Select(a => new
+            {
+                Date     = a.AppointmentDate.ToString("yyyy-MM-dd HH:mm"),
+                Service  = a.ServiceTypeName,
+                Vet      = a.VetName,
+                Status   = a.Status,
+                Duration = $"{a.Duration} min",
+                Notes    = string.IsNullOrWhiteSpace(a.Notes) ? "—" : a.Notes
+            }).ToList();
+
+        grid.DataSource = appts;
+        ApplyColumnWidths(grid, ("Date", 140), ("Service", 0), ("Vet", 130), ("Status", 100), ("Duration", 80), ("Notes", 160));
+
+        // Color-code status column
+        grid.CellFormatting += (_, e) =>
+        {
+            if (e.RowIndex < 0 || grid.Columns[e.ColumnIndex].Name != "Status" || e.Value == null) return;
+            e.CellStyle.ForeColor = e.Value.ToString() switch
+            {
+                "Completed"   => Theme.AppTheme.Success,
+                "Cancelled"   => Theme.AppTheme.Danger,
+                "In Progress" => Theme.AppTheme.Warning,
+                _             => Theme.AppTheme.Accent
+            };
+            e.CellStyle.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+        };
+
+        AddEmptyOverlay(grid, "No appointments on record.\nClick \"+ Appointment\" above to schedule one.");
+        wrapper.Controls.Add(grid);
+        return wrapper;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // TAB 4: CBC RESULTS
+    // ════════════════════════════════════════════════════════════════════════
+    private Control BuildCbcResults()
+    {
+        var wrapper = new Panel { BackColor = Color.White };
+        var bar = BuildTabSubHeader("Complete Blood Count laboratory results — double-click to view full panel");
+        wrapper.Controls.Add(bar);
+
+        var grid = CreateStyledGrid();
+        grid.Dock = DockStyle.Fill;
+
+        var cbcList = DataStore.GetCbcRecords()
             .Where(c => c.PetId == _pet.Id)
             .OrderByDescending(c => c.TestDate)
-            .Select(c => new
-            {
-                Date = c.TestDate.ToString("yyyy-MM-dd"),
-                WBC = c.Wbc,
-                RBC = c.Rbc,
-                HGB = c.Hgb,
-                HCT = $"{c.Hct:F1}%",
-                PLT = c.Plt
-            })
             .ToList();
 
-        return grid;
+        grid.DataSource = cbcList.Select(c => new
+        {
+            c.Id,
+            Date    = c.TestDate.ToString("yyyy-MM-dd"),
+            WBC     = c.Wbc,
+            RBC     = c.Rbc,
+            HGB     = c.Hgb,
+            HCT     = $"{c.Hct}%",
+            PLT     = c.Plt,
+            MCV     = c.Mcv,
+            MCH     = c.Mch,
+            Remarks = string.IsNullOrWhiteSpace(c.Remarks) ? "—" : c.Remarks
+        }).ToList();
+
+        if (grid.Columns["Id"] != null) grid.Columns["Id"].Visible = false;
+        ApplyColumnWidths(grid, ("Date", 95), ("WBC", 70), ("RBC", 70), ("HGB", 70), ("HCT", 65), ("PLT", 70), ("MCV", 65), ("MCH", 65), ("Remarks", 0));
+
+        // Tooltip on header row describing units
+        grid.CellMouseEnter += (_, e) =>
+        {
+            if (e.RowIndex != -1) return;
+            grid.Columns[e.ColumnIndex].ToolTipText = e.ColumnIndex switch
+            {
+                _ when grid.Columns[e.ColumnIndex].Name == "WBC" => "White Blood Cells (10⁹/L)",
+                _ when grid.Columns[e.ColumnIndex].Name == "RBC" => "Red Blood Cells (10¹²/L)",
+                _ when grid.Columns[e.ColumnIndex].Name == "HGB" => "Hemoglobin (g/dL)",
+                _ when grid.Columns[e.ColumnIndex].Name == "HCT" => "Hematocrit (%)",
+                _ when grid.Columns[e.ColumnIndex].Name == "PLT" => "Platelets (10⁹/L)",
+                _ when grid.Columns[e.ColumnIndex].Name == "MCV" => "Mean Corpuscular Volume (fL)",
+                _ when grid.Columns[e.ColumnIndex].Name == "MCH" => "Mean Corpuscular Hemoglobin (pg)",
+                _ => ""
+            };
+        };
+
+        grid.CellDoubleClick += (_, e) =>
+        {
+            if (e.RowIndex < 0) return;
+            int id  = (int)grid.Rows[e.RowIndex].Cells["Id"].Value;
+            var rec = cbcList.FirstOrDefault(c => c.Id == id);
+            if (rec != null) { using var dlg = new CbcDialog(rec); dlg.ShowDialog(); }
+        };
+
+        AddEmptyOverlay(grid, "No CBC results on record.\nClick \"+ CBC\" above to add a lab result.");
+        wrapper.Controls.Add(grid);
+        return wrapper;
     }
 
-    private string GetAge()
+    // ════════════════════════════════════════════════════════════════════════
+    // TAB 5: MEDICATIONS
+    // ════════════════════════════════════════════════════════════════════════
+    private Control BuildMedications()
     {
-        if (_pet.DateOfBirth == null)
-            return "Unknown";
+        var wrapper = new Panel { BackColor = Color.White };
+        var bar = BuildTabSubHeader("Medications dispensed across all medical records");
+        wrapper.Controls.Add(bar);
 
-        var years = DateTime.Today.Year - _pet.DateOfBirth.Value.Year;
-        if (_pet.DateOfBirth.Value.Date > DateTime.Today.AddYears(-years))
-            years--;
+        var grid = CreateStyledGrid();
+        grid.Dock = DockStyle.Fill;
 
-        return $"{years} yr";
+        var meds = DataStore.GetMedicalRecords()
+            .Where(r => r.PetId == _pet.Id)
+            .SelectMany(r => DataStore.GetRecordMedications(r.Id).Select(p => new
+            {
+                Date       = r.CreatedAt.ToString("yyyy-MM-dd"),
+                Medication = p.MedicationName,
+                Dosage     = p.Dosage,
+                Notes      = string.IsNullOrWhiteSpace(p.Notes) ? "—" : p.Notes,
+                Vet        = r.VetName
+            }))
+            .OrderByDescending(m => m.Date)
+            .ToList();
+
+        grid.DataSource = meds;
+        ApplyColumnWidths(grid, ("Date", 95), ("Medication", 0), ("Dosage", 120), ("Vet", 130), ("Notes", 180));
+        AddEmptyOverlay(grid, "No medications recorded.");
+        wrapper.Controls.Add(grid);
+        return wrapper;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // TAB 6: NOTES
+    // ════════════════════════════════════════════════════════════════════════
+    private Control BuildNotes()
+    {
+        var wrapper = new Panel { BackColor = Color.White, Padding = new Padding(24, 20, 24, 20) };
+        var bar = BuildTabSubHeader("Clinical notes and general remarks about this patient");
+        wrapper.Controls.Add(bar);
+
+        var card = new Panel
+        {
+            Dock      = DockStyle.Fill,
+            BackColor = Color.White,
+            Padding   = new Padding(20)
+        };
+
+        bool hasNotes = !string.IsNullOrWhiteSpace(_pet.Notes);
+        var txt = new TextBox
+        {
+            Dock        = DockStyle.Fill,
+            Multiline   = true,
+            ReadOnly    = true,
+            BackColor   = Color.White,
+            BorderStyle = BorderStyle.None,
+            Font        = new Font("Segoe UI", 11f),
+            ForeColor   = hasNotes ? Color.FromArgb(35, 45, 65) : Color.FromArgb(180, 185, 195),
+            Text        = hasNotes ? _pet.Notes : "No clinical notes recorded for this patient.",
+            ScrollBars  = ScrollBars.Vertical
+        };
+        card.Controls.Add(txt);
+        wrapper.Controls.Add(card);
+        return wrapper;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // HELPERS
+    // ════════════════════════════════════════════════════════════════════════
+    private Panel BuildTabSubHeader(string description)
+    {
+        var bar = new Panel { Dock = DockStyle.Top, Height = 44, BackColor = Color.FromArgb(251, 252, 253) };
+        bar.Paint += (_, e) => { using var p = new Pen(Color.FromArgb(235, 238, 242)); e.Graphics.DrawLine(p, 0, bar.Height - 1, bar.Width, bar.Height - 1); };
+        var lbl = new Label
+        {
+            Text      = description,
+            Font      = new Font("Segoe UI", 8.5f),
+            ForeColor = Color.FromArgb(120, 135, 155),
+            AutoSize  = true,
+            Left      = 16,
+            Top       = 14
+        };
+        bar.Controls.Add(lbl);
+        return bar;
+    }
+
+    private static DataGridView CreateStyledGrid()
+    {
+        var dgv = new DataGridView
+        {
+            ReadOnly                = true,
+            AllowUserToAddRows      = false,
+            AllowUserToDeleteRows   = false,
+            RowHeadersVisible       = false,
+            SelectionMode           = DataGridViewSelectionMode.FullRowSelect,
+            AutoSizeColumnsMode     = DataGridViewAutoSizeColumnsMode.None,
+            BackgroundColor         = Color.White,
+            BorderStyle             = BorderStyle.None,
+            ScrollBars              = ScrollBars.Both,
+            ShowCellToolTips        = true,
+            Cursor                  = Cursors.Hand
+        };
+        UIHelper.StyleGrid(dgv);
+        dgv.RowTemplate.Height = 34;
+        return dgv;
+    }
+
+    private static void ApplyColumnWidths(DataGridView dgv, params (string Name, int Width)[] cols)
+    {
+        dgv.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+        foreach (var (name, w) in cols)
+        {
+            if (dgv.Columns[name] == null) continue;
+            if (w == 0)
+                dgv.Columns[name].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            else
+                dgv.Columns[name].Width = w;
+        }
+    }
+
+    private static void AddEmptyOverlay(DataGridView grid, string message)
+    {
+        var lbl = UIHelper.CreateEmptyDataLabel(message);
+        lbl.Font = new Font("Segoe UI", 10f, FontStyle.Italic);
+        lbl.Visible = false;
+        grid.Parent?.Controls.Add(lbl);
+        lbl.BringToFront();
+
+        grid.DataBindingComplete += (_, _) =>
+        {
+            bool empty = grid.Rows.Count == 0;
+            lbl.Visible = empty;
+            grid.Visible = !empty;
+        };
+    }
+
+    private static Button CreateTopBtn(string text, Color color)
+    {
+        var btn = new Button
+        {
+            Text      = text,
+            Font      = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            ForeColor = Color.White,
+            BackColor = color,
+            FlatStyle = FlatStyle.Flat,
+            Height    = 32,
+            AutoSize  = false,
+            Width     = TextRenderer.MeasureText(text, new Font("Segoe UI", 8.5f, FontStyle.Bold)).Width + 26,
+            Cursor    = Cursors.Hand
+        };
+        btn.FlatAppearance.BorderSize = 0;
+        btn.FlatAppearance.MouseOverBackColor = ControlPaint.Light(color, 0.1f);
+        return btn;
+    }
+
+    private static GraphicsPath RoundRect(Rectangle rc, int radius)
+    {
+        int d = radius * 2;
+        var path = new GraphicsPath();
+        path.AddArc(rc.Left,         rc.Top,          d, d, 180, 90);
+        path.AddArc(rc.Right - d,    rc.Top,          d, d, 270, 90);
+        path.AddArc(rc.Right - d,    rc.Bottom - d,   d, d,   0, 90);
+        path.AddArc(rc.Left,         rc.Bottom - d,   d, d,  90, 90);
+        path.CloseFigure();
+        return path;
+    }
+
+    private string GetAgeWithDate()
+    {
+        if (_pet.DateOfBirth == null) return "Unknown";
+        var dob  = _pet.DateOfBirth.Value;
+        var diff = DateTime.Today - dob;
+        int years  = diff.Days / 365;
+        int months = (diff.Days % 365) / 30;
+        string age = years > 0 ? $"{years}y {months}m" : $"{months} months";
+        return $"{age}  ({dob:MMM d, yyyy})";
     }
 }
