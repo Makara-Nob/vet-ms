@@ -79,12 +79,18 @@ public class PetDetailsForm : Form
         };
 
         // ── Profile Header ─────────────────────────────────────────────────
-        var headerHeight = 200;
-        var header = new Panel { Dock = DockStyle.Top, Height = headerHeight };
+        int headerHeight = 210;
+        var header = new Panel
+        {
+            Dock      = DockStyle.Top,
+            Height    = headerHeight,
+            BackColor = Theme.AppTheme.Primary   // fallback solid color
+        };
+        // gradient repainted on every resize
         header.Paint += (_, e) =>
         {
             using var brush = new LinearGradientBrush(
-                new Rectangle(0, 0, header.Width, header.Height),
+                new Rectangle(0, 0, Math.Max(header.Width, 1), header.Height),
                 Theme.AppTheme.Primary,
                 Theme.AppTheme.BrandDeep,
                 LinearGradientMode.Vertical);
@@ -92,7 +98,7 @@ public class PetDetailsForm : Form
         };
 
         // Avatar
-        int avatarSize = 90;
+        int avatarSize = 88;
         var picAvatar = new PictureBox
         {
             Width     = avatarSize,
@@ -111,52 +117,52 @@ public class PetDetailsForm : Form
         picAvatar.Region = new Region(clipPath);
         UIHelper.AttachImageViewer(picAvatar, () => picAvatar.Image);
 
-        header.Controls.Add(picAvatar);
-
+        // Pet name label — centered, fixed width matches sidebar
         var lblName = new Label
         {
             Text      = _pet.Name,
             Font      = new Font("Segoe UI", 13f, FontStyle.Bold),
             ForeColor = Color.White,
             TextAlign = ContentAlignment.MiddleCenter,
-            Width     = 260
+            AutoSize  = false,
+            Width     = sidebar.Width,
+            Height    = 26,
+            BackColor = Color.Transparent
         };
 
-        // Status badge
-        bool active = _pet.IsActive;
-        var lblStatus = new Label
+        // Status badge — use a Panel so rounded drawing is clean
+        bool   active      = _pet.IsActive;
+        Color  badgeColor  = active ? Theme.AppTheme.Success : Theme.AppTheme.Danger;
+        string badgeText   = active ? "ACTIVE" : "INACTIVE";
+        var    statusBadge = new Panel { Width = 74, Height = 22, BackColor = Color.Transparent, Cursor = Cursors.Default };
+        if (!active) statusBadge.Width = 86;
+        statusBadge.Paint += (_, e) =>
         {
-            Text      = active ? "  ACTIVE  " : "  INACTIVE  ",
-            Font      = new Font("Segoe UI", 7.5f, FontStyle.Bold),
-            ForeColor = Color.White,
-            BackColor = active ? Theme.AppTheme.Success : Theme.AppTheme.Danger,
-            AutoSize  = true,
-            Padding   = new Padding(8, 3, 8, 3)
-        };
-        lblStatus.Paint += (_, e) =>
-        {
-            using var path = RoundRect(new Rectangle(0, 0, lblStatus.Width, lblStatus.Height), 10);
-            using var brush = new SolidBrush(lblStatus.BackColor);
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using var path  = RoundRect(new Rectangle(0, 0, statusBadge.Width - 1, statusBadge.Height - 1), 10);
+            using var brush = new SolidBrush(badgeColor);
             e.Graphics.FillPath(brush, path);
             using var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-            using var fg = new SolidBrush(Color.White);
-            e.Graphics.DrawString(lblStatus.Text, lblStatus.Font, fg,
-                new RectangleF(0, 0, lblStatus.Width, lblStatus.Height), sf);
+            e.Graphics.DrawString(badgeText, new Font("Segoe UI", 7.5f, FontStyle.Bold),
+                Brushes.White, new RectangleF(0, 0, statusBadge.Width, statusBadge.Height), sf);
         };
-        lblStatus.BackColor = Color.Transparent; // let Paint handle background
 
-        header.Resize += (_, _) =>
+        void LayoutHeader()
         {
-            picAvatar.Left = (header.Width - avatarSize) / 2;
-            picAvatar.Top  = 28;
-            lblName.Left   = (header.Width - lblName.Width) / 2;
-            lblName.Top    = picAvatar.Bottom + 8;
-            lblStatus.Left = (header.Width - lblStatus.Width) / 2;
-            lblStatus.Top  = lblName.Bottom + 4;
-        };
+            picAvatar.Left   = (sidebar.Width - avatarSize) / 2;
+            picAvatar.Top    = 24;
+            lblName.Left     = 0;
+            lblName.Top      = picAvatar.Bottom + 10;
+            lblName.Width    = sidebar.Width;
+            statusBadge.Left = (sidebar.Width - statusBadge.Width) / 2;
+            statusBadge.Top  = lblName.Bottom + 6;
+        }
+
+        header.Controls.Add(picAvatar);
         header.Controls.Add(lblName);
-        header.Controls.Add(lblStatus);
+        header.Controls.Add(statusBadge);
+        header.Resize += (_, _) => LayoutHeader();
+        LayoutHeader();
         sidebar.Controls.Add(header);
 
         // ── Info Rows ──────────────────────────────────────────────────────
@@ -345,7 +351,7 @@ public class PetDetailsForm : Form
         var statsRow = new Panel
         {
             Dock      = DockStyle.Top,
-            Height    = 100,
+            Height    = 104,
             BackColor = Color.FromArgb(245, 247, 250),
             Padding   = new Padding(16, 12, 16, 0)
         };
@@ -385,10 +391,14 @@ public class PetDetailsForm : Form
     // ════════════════════════════════════════════════════════════════════════
     private Panel BuildStatCard(string title, string value, string sub, Color accent)
     {
+        // Value font: big for short numbers (e.g. "5"), compact for dates
+        float valueFontSize = value.Length <= 3 ? 22f : value.Length <= 6 ? 16f : 12.5f;
+        bool  isDate        = value.Length > 3 && value != "—";
+
         var card = new Panel
         {
-            Width     = 182,
-            Height    = 76,
+            Width     = 210,
+            Height    = 80,
             BackColor = Color.White,
             Margin    = new Padding(0, 0, 10, 0),
             Cursor    = Cursors.Default
@@ -399,42 +409,41 @@ public class PetDetailsForm : Form
             using var borderPath = RoundRect(new Rectangle(0, 0, card.Width - 1, card.Height - 1), 8);
             using var borderPen  = new Pen(Color.FromArgb(226, 229, 235));
             e.Graphics.DrawPath(borderPen, borderPath);
-            // Left accent bar
             using var accentBrush = new SolidBrush(accent);
-            e.Graphics.FillRectangle(accentBrush, 0, 14, 3, card.Height - 28);
+            e.Graphics.FillRectangle(accentBrush, 0, 16, 3, card.Height - 32);
         };
 
-        var lblValue = new Label
-        {
-            Text      = value,
-            Font      = new Font("Segoe UI", 18f, FontStyle.Bold),
-            ForeColor = Color.FromArgb(30, 40, 60),
-            AutoSize  = true,
-            Left      = 18, Top = 12
-        };
         var lblTitle = new Label
         {
-            Text      = title,
-            Font      = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            ForeColor = Color.FromArgb(80, 90, 110),
+            Text      = title.ToUpperInvariant(),
+            Font      = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+            ForeColor = Color.FromArgb(140, 150, 170),
             AutoSize  = true,
-            Left      = 18, Top = lblValue.Bottom + 2
+            Left      = 16, Top = 11
+        };
+        var lblValue = new Label
+        {
+            Text        = value,
+            Font        = new Font("Segoe UI", valueFontSize, FontStyle.Bold),
+            ForeColor   = Color.FromArgb(30, 40, 60),
+            AutoSize    = false,
+            Width       = card.Width - 22,
+            Height      = isDate ? 22 : 30,
+            Left        = 16,
+            Top         = 28
         };
         var lblSub = new Label
         {
             Text      = sub,
             Font      = new Font("Segoe UI", 7.5f),
-            ForeColor = Color.FromArgb(160, 170, 185),
+            ForeColor = Color.FromArgb(170, 178, 192),
             AutoSize  = true,
-            Left      = 18, Top = lblTitle.Bottom + 1
+            Left      = 16, Top = 60
         };
 
-        card.Controls.Add(lblValue);
         card.Controls.Add(lblTitle);
+        card.Controls.Add(lblValue);
         card.Controls.Add(lblSub);
-
-        // Layout after add (auto-size needs parent)
-        card.Controls[0].Left = 18; card.Controls[0].Top = 10;
         return card;
     }
 
@@ -585,88 +594,84 @@ public class PetDetailsForm : Form
 
     private Panel BuildTimelineRow(DateTime date, string kind, string title, string detail, Color accent)
     {
-        int rowHeight = 64;
         var row = new Panel
         {
-            Width     = 720,
-            Height    = rowHeight,
+            Width     = 900,
+            Height    = 60,
             Margin    = new Padding(0, 0, 0, 4),
             BackColor = Color.White,
             Cursor    = Cursors.Hand
         };
 
-        // Hover highlight
-        row.MouseEnter += (_, _) => row.BackColor = Color.FromArgb(250, 251, 253);
-        row.MouseLeave += (_, _) => row.BackColor = Color.White;
+        row.MouseEnter += (_, _) => { row.BackColor = Color.FromArgb(250, 251, 253); row.Invalidate(); };
+        row.MouseLeave += (_, _) => { row.BackColor = Color.White; row.Invalidate(); };
 
         row.Paint += (_, e) =>
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using var path   = RoundRect(new Rectangle(0, 0, row.Width - 2, row.Height - 1), 8);
-            using var border = new Pen(Color.FromArgb(235, 238, 242));
+            // Card border
+            using var border = new Pen(Color.FromArgb(232, 235, 240));
+            using var path   = RoundRect(new Rectangle(0, 0, row.Width - 2, row.Height - 1), 7);
             e.Graphics.DrawPath(border, path);
-            // Accent dot + line
-            int cx = 16, cy = row.Height / 2;
-            using var dotBrush = new SolidBrush(accent);
-            e.Graphics.FillEllipse(dotBrush, cx - 5, cy - 5, 10, 10);
+            // Accent dot (left center)
+            using var dot = new SolidBrush(accent);
+            int cy = row.Height / 2;
+            e.Graphics.FillEllipse(dot, 14, cy - 5, 10, 10);
         };
 
-        // Kind badge
-        string kindLabel = kind switch
-        {
-            "MedRec" => "VISIT",
-            "Appt"   => "APPT",
-            "CBC"    => "CBC",
-            _        => kind.ToUpper()
-        };
+        // Kind badge label text
+        string kindLabel = kind switch { "MedRec" => "VISIT", "Appt" => "APPT", "CBC" => "CBC", _ => kind.ToUpper() };
+
+        // ── Row 1: Badge + Date ───────────────────────────────────────────
         var badge = new Label
         {
             Text      = kindLabel,
             Font      = new Font("Segoe UI", 6.5f, FontStyle.Bold),
             ForeColor = accent,
-            BackColor = Color.FromArgb(20, accent.R, accent.G, accent.B),
+            BackColor = Color.FromArgb(22, accent.R, accent.G, accent.B),
             AutoSize  = true,
-            Padding   = new Padding(6, 2, 6, 2),
-            Left      = 36, Top = 14
+            Padding   = new Padding(5, 2, 5, 2),
+            Left      = 34, Top = 10
         };
 
         var lblDate = new Label
         {
-            Text      = date.ToString("MMM d"),
+            Text      = date.ToString("MMM d, yyyy"),
             Font      = new Font("Segoe UI", 8f),
-            ForeColor = Color.FromArgb(140, 155, 175),
+            ForeColor = Color.FromArgb(145, 158, 175),
             AutoSize  = true,
-            Left      = badge.Right + 10, Top = 15
+            Top       = 12
         };
+
+        // ── Row 2: Title · Detail ─────────────────────────────────────────
         var lblTitle = new Label
         {
             Text      = title,
             Font      = new Font("Segoe UI", 9.5f, FontStyle.Bold),
             ForeColor = Color.FromArgb(30, 40, 60),
             AutoSize  = true,
-            Left      = 36, Top = 34
+            Left      = 34, Top = 33
         };
         var lblDetail = new Label
         {
             Text      = detail,
             Font      = new Font("Segoe UI", 8.5f),
-            ForeColor = Color.FromArgb(110, 120, 140),
+            ForeColor = Color.FromArgb(115, 125, 145),
             AutoSize  = true,
-            Left      = lblTitle.Left + 0, Top = 34
+            Top       = 36
         };
 
-        // Layout after adding so AutoSize is accurate
         row.Controls.Add(badge);
         row.Controls.Add(lblDate);
         row.Controls.Add(lblTitle);
         row.Controls.Add(lblDetail);
 
-        // Fix layout on parent set
+        // Position date and detail after badge/title widths are known
         row.Layout += (_, _) =>
         {
-            badge.Left    = 36; badge.Top = 11;
-            lblDate.Left  = badge.Right + 8; lblDate.Top = 13;
-            lblTitle.Left = 36; lblTitle.Top = 33;
+            badge.Left    = 34;  badge.Top = 10;
+            lblDate.Left  = badge.Right + 8; lblDate.Top = 12;
+            lblTitle.Left = 34;  lblTitle.Top = 33;
             lblDetail.Left = lblTitle.Right + 10; lblDetail.Top = 36;
         };
 
