@@ -535,14 +535,14 @@ public class AnimalSpeciesDialog : Form
     {
         bool isEdit   = existing != null;
         Text          = isEdit ? "Edit Species" : "Add Species";
-        Size          = new Size(500, isEdit ? 384 : 370);
+        Size          = new Size(500, isEdit ? 400 : 400);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; MinimizeBox = false;
         BackColor   = Color.White;
 
         // ── Dialog header strip ───────────────────────────────────────────────
-        var header = new Panel { Dock = DockStyle.Top, Height = 56, BackColor = UIHelper.Primary };
+        var header = new Panel { Dock = DockStyle.Top, Height = 90, BackColor = UIHelper.Primary };
         var lblTitle = new Label
         {
             Text = isEdit ? "Edit Species" : "Add New Species",
@@ -661,6 +661,26 @@ public class AnimalSpeciesDialog : Form
         };
         btn.FlatAppearance.BorderSize = 0;
         btn.FlatAppearance.MouseOverBackColor = ControlPaint.Dark(back, 0.1f);
+        ApplyRound(btn, 6);
+        btn.SizeChanged += (_, _) => ApplyRound(btn, 6);
         return btn;
+    }
+
+    private static void ApplyRound(Control c, int r)
+    {
+        if (c.Width <= 0 || c.Height <= 0) return;
+        c.Region = new Region(RoundRect(new Rectangle(0, 0, c.Width, c.Height), r));
+    }
+
+    private static GraphicsPath RoundRect(Rectangle rc, int r)
+    {
+        int d = r * 2;
+        var p = new GraphicsPath();
+        p.AddArc(rc.Left, rc.Top, d, d, 180, 90);
+        p.AddArc(rc.Right - d, rc.Top, d, d, 270, 90);
+        p.AddArc(rc.Right - d, rc.Bottom - d, d, d, 0, 90);
+        p.AddArc(rc.Left, rc.Bottom - d, d, d, 90, 90);
+        p.CloseFigure();
+        return p;
     }
 }

@@ -7,95 +7,199 @@ public class MedicalRecordForm : Form
 {
     private DataGridView dgv = null!;
     private TextBox txtSearch = null!;
-    private Button btnPrev = null!, btnNext = null!;
-    private Label lblPage = null!, lblStatus = null!, lblNoData = null!;
-    private List<MedicalRecord> _data = [], _filtered = [];
-    private int _currentPage = 1;
-    private readonly int _pageSize = 20;
+    private Label lblTotal = null!;
+    private Label lblPageInfo = null!;
+    private Label lblRppCount = null!;
+    private Button btnPrev = null!;
+    private Button btnNext = null!;
+    private ComboBox cboPerPage = null!;
+    private Label lblNoData = null!;
 
-    public MedicalRecordForm() { InitializeUI(); LoadData(); }
+    private int _currentPage = 1;
+    private int _pageSize = 10;
+    private List<MedicalRecord> _data = [];
+    private List<MedicalRecord> _filtered = [];
+
+    public MedicalRecordForm()
+    {
+        InitializeUI();
+        LoadData();
+    }
 
     private void InitializeUI()
     {
-        Text = "Medical Records"; BackColor = UIHelper.LightBg;
-        var contentPanel  = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(20, 8, 20, 0) };
-        var gridContainer = new Panel { Dock = DockStyle.Fill, BackColor = Color.White };
-        dgv = new DataGridView
-        {
-            Dock = DockStyle.Fill,
-            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
-            ScrollBars = ScrollBars.Vertical,
-            SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-            MultiSelect = false,
-            ReadOnly = true,
-            AllowUserToAddRows = false,
-            AllowUserToDeleteRows = false,
-            AllowUserToResizeRows = false,
-            RowHeadersVisible = false,
-            BorderStyle = BorderStyle.None,
-            BackgroundColor = Color.White,
-            Cursor = Cursors.Hand
-        };
-        UIHelper.StyleGrid(dgv);
-        dgv.ColumnHeadersHeight = 42;
-        dgv.RowTemplate.Height  = 38;
-        dgv.ShowCellToolTips    = true;
-        dgv.Resize             += (_, _) => DistributeColumns();
-        dgv.CellPainting   += (_, e) => UIHelper.PaintActionColumn(dgv, e, "View", "Edit");
-        dgv.CellMouseClick += (_, e) => UIHelper.HandleActionColumnClick(dgv, e, ViewRow, EditRow, "View", "Edit");
-        dgv.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0 && dgv.Columns[e.ColumnIndex].Name != "ColAction") ViewRow(e.RowIndex); };
+        Text = "Medical Records";
+        BackColor = Color.FromArgb(245, 247, 250);
 
-        var pag = BuildPaginationBar(); pag.Dock = DockStyle.Bottom;
-        lblNoData = UIHelper.CreateEmptyDataLabel("No medical records yet.");
-
-        gridContainer.Controls.Add(lblNoData);
-        gridContainer.Controls.Add(dgv);
-        gridContainer.Controls.Add(pag);
-        lblNoData.BringToFront();
-
-        contentPanel.Controls.Add(gridContainer);
-        Controls.Add(contentPanel);
-        Controls.Add(BuildStatusBar());
-        Controls.Add(BuildSearchBar());
+        Controls.Add(BuildGridCard());
+        Controls.Add(BuildFooter());
+        Controls.Add(BuildToolbar());
         Controls.Add(UIHelper.CreateHeader("Medical Records", "Clinical notes, diagnoses and prescriptions"));
     }
 
-    private Panel BuildStatusBar()
+    // ── Toolbar ──────────────────────────────────────────────────────────────
+    private Panel BuildToolbar()
     {
-        var p = new Panel { Dock = DockStyle.Bottom, Height = 28, BackColor = Color.White };
-        lblStatus = new Label { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(20, 0, 0, 0), ForeColor = Color.FromArgb(90, 100, 115), Font = new Font("Segoe UI", 8.5f) };
-        p.Controls.Add(lblStatus); p.Controls.Add(new Panel { Dock = DockStyle.Top, Height = 1, BackColor = Color.FromArgb(230, 232, 235) }); return p;
-    }
+        var bar = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 60,
+            BackColor = Color.White,
+            Padding = new Padding(16, 12, 16, 12)
+        };
+        bar.Paint += (_, e) =>
+        {
+            using var pen = new Pen(Color.FromArgb(225, 228, 235));
+            e.Graphics.DrawLine(pen, 0, bar.Height - 1, bar.Width, bar.Height - 1);
+        };
 
-    private Panel BuildSearchBar()
-    {
-        var p = new Panel { Dock = DockStyle.Top, Height = 72 };
-        var ico = new Label { Text = "🔍", Width = 26, Height = 38, Left = 20, Top = 17, TextAlign = ContentAlignment.MiddleCenter };
-        txtSearch = new TextBox { Left = 46, Top = 20, Width = 240, Font = new Font("Segoe UI", 11f), PlaceholderText = "Search pet, owner, vet, diagnosis..." };
+        var searchPanel = new Panel { Top = 12, Left = 16, Width = 300, Height = 36, BackColor = Color.White };
+        searchPanel.Paint += (_, e) =>
+        {
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using var pen = new Pen(Color.FromArgb(210, 215, 225));
+            using var path = RoundRect(new Rectangle(0, 0, searchPanel.Width - 1, searchPanel.Height - 1), 6);
+            e.Graphics.DrawPath(pen, path);
+        };
+        var icoSearch = new Label { Text = "🔍", Width = 28, Left = 6, Top = 5, TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.Transparent };
+        txtSearch = new TextBox
+        {
+            Left = 32, Top = 7, Width = 258,
+            Font = new Font("Segoe UI", 10f), BorderStyle = BorderStyle.None,
+            BackColor = Color.White, PlaceholderText = "Search pet, owner, vet, diagnosis..."
+        };
         txtSearch.TextChanged += (_, _) => FilterData();
+        searchPanel.Controls.AddRange(new Control[] { icoSearch, txtSearch });
 
-        var btnAdd   = UIHelper.CreateButton("+ New Record", UIHelper.Success, 110, 38); btnAdd.Left   = txtSearch.Right + 14; btnAdd.Top   = 17; btnAdd.Click += BtnAdd_Click;
-        var btnReset = UIHelper.CreateButton("Reset", Color.SlateGray, 80, 38);          btnReset.Left = btnAdd.Right + 8;     btnReset.Top = 17;
-        btnReset.Click += (_, _) => { txtSearch.Clear(); LoadData(); };
+        var btnAdd = MakeButton("+ New Record", UIHelper.Success, 130, 36);
+        btnAdd.Top = 12; btnAdd.Left = searchPanel.Right + 8;
+        btnAdd.Click += BtnAdd_Click;
 
-        p.Controls.AddRange(new Control[] { ico, txtSearch, btnAdd, btnReset }); return p;
+        bar.Controls.Add(searchPanel);
+        bar.Controls.Add(btnAdd);
+        return bar;
     }
 
-    private Panel BuildPaginationBar()
+    // ── Grid card ─────────────────────────────────────────────────────────────
+    private Panel BuildGridCard()
     {
-        var p = new Panel { Height = 60, BackColor = Color.White };
-        p.Controls.Add(new Panel { Dock = DockStyle.Top, Height = 1, BackColor = Color.FromArgb(230, 235, 240) });
-        btnPrev = UIHelper.CreateButton("← Prev", Color.FromArgb(108, 117, 125), 80, 36);
-        btnNext = UIHelper.CreateButton("Next →", Color.FromArgb(108, 117, 125), 80, 36);
-        lblPage = new Label { AutoSize = false, Width = 110, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 9.5f), ForeColor = Color.FromArgb(64, 64, 64) };
-        p.Resize += (_, _) => { btnNext.Left = p.Width - btnNext.Width - 16; btnNext.Top = 12; lblPage.Left = btnNext.Left - lblPage.Width - 10; lblPage.Top = 18; btnPrev.Left = lblPage.Left - btnPrev.Width - 10; btnPrev.Top = 12; };
+        var outer = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(16, 12, 16, 12) };
+        var tableBox = new Panel { Dock = DockStyle.Fill, BackColor = Color.White };
+        tableBox.Paint += (_, e) =>
+        {
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using var pen = new Pen(Color.FromArgb(220, 223, 230));
+            e.Graphics.DrawRectangle(pen, new Rectangle(0, 0, tableBox.Width - 1, tableBox.Height - 1));
+        };
+
+        dgv = new DataGridView
+        {
+            Dock = DockStyle.Fill, Margin = new Padding(1), BorderStyle = BorderStyle.None,
+            BackgroundColor = Color.White, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+            SelectionMode = DataGridViewSelectionMode.FullRowSelect, MultiSelect = false,
+            ReadOnly = true, RowHeadersVisible = false, AllowUserToAddRows = false,
+            AllowUserToDeleteRows = false, AllowUserToResizeRows = false,
+            ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.EnableResizing,
+            Cursor = Cursors.Hand, CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
+            GridColor = Color.FromArgb(235, 238, 242)
+        };
+
+        dgv.ColumnHeadersHeight = 42;
+        dgv.EnableHeadersVisualStyles = false;
+        dgv.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
+        dgv.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+        {
+            BackColor = Color.White, ForeColor = Color.FromArgb(60, 70, 90),
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold), Alignment = DataGridViewContentAlignment.MiddleLeft,
+            Padding = new Padding(8, 0, 0, 0), SelectionBackColor = Color.White,
+            SelectionForeColor = Color.FromArgb(60, 70, 90)
+        };
+        dgv.DefaultCellStyle = new DataGridViewCellStyle
+        {
+            Font = new Font("Segoe UI", 9.5f), ForeColor = Color.FromArgb(30, 40, 60),
+            BackColor = Color.White, SelectionBackColor = Color.FromArgb(235, 230, 255),
+            SelectionForeColor = Color.FromArgb(30, 40, 60), Padding = new Padding(8, 0, 0, 0)
+        };
+        dgv.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle
+        {
+            BackColor = Color.White, SelectionBackColor = Color.FromArgb(235, 230, 255),
+            SelectionForeColor = Color.FromArgb(30, 40, 60)
+        };
+        dgv.RowTemplate.Height = 40;
+
+        dgv.CellPainting += DgvCellPainting;
+        dgv.CellMouseClick += (_, e) =>
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0 || e.Button != MouseButtons.Left) return;
+            if (dgv.Columns[e.ColumnIndex].Name != "ColAction") return;
+            UIHelper.HandleDynamicActionColumnClick(dgv, e, ("View", ViewRow), ("Edit", EditRow));
+        };
+        dgv.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0 && dgv.Columns[e.ColumnIndex].Name != "ColAction") ViewRow(e.RowIndex); };
+
+        lblNoData = UIHelper.CreateEmptyDataLabel("No medical records yet.");
+        tableBox.Controls.Add(lblNoData);
+        tableBox.Controls.Add(dgv);
+        lblNoData.BringToFront();
+        outer.Controls.Add(tableBox);
+        return outer;
+    }
+
+    // ── Footer ────────────────────────────────────────────────────────────────
+    private Panel BuildFooter()
+    {
+        var bar = new Panel { Dock = DockStyle.Bottom, Height = 52, BackColor = Color.White };
+        bar.Paint += (_, e) =>
+        {
+            using var pen = new Pen(Color.FromArgb(225, 228, 235));
+            e.Graphics.DrawLine(pen, 0, 0, bar.Width, 0);
+        };
+
+        lblTotal = new Label { Text = "Total records: 0", Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), ForeColor = UIHelper.Success, AutoSize = true, Top = 16 };
+        var lblShow = new Label { Text = "Show", Font = new Font("Segoe UI", 9f), ForeColor = Color.FromArgb(80, 90, 110), AutoSize = true, Top = 18 };
+        cboPerPage = new ComboBox { Width = 65, Top = 13, Font = new Font("Segoe UI", 9f), DropDownStyle = ComboBoxStyle.DropDownList };
+        cboPerPage.Items.AddRange(new object[] { 10, 25, 50, 100 });
+        cboPerPage.SelectedIndex = 0;
+        cboPerPage.SelectedIndexChanged += (_, _) => { _pageSize = (int)cboPerPage.SelectedItem!; _currentPage = 1; RefreshGrid(); };
+
+        lblRppCount = new Label { Text = "(0) Records per page", Font = new Font("Segoe UI", 9f), ForeColor = Color.FromArgb(80, 90, 110), AutoSize = true, Top = 18 };
+        lblPageInfo = new Label { Text = "Showing page 1 of 1 Pages", Font = new Font("Segoe UI", 9f), ForeColor = Color.FromArgb(80, 90, 110), AutoSize = true, Top = 18 };
+
+        btnPrev = MakeButton("Prev", UIHelper.Accent, 70, 32); btnPrev.Top = 10;
+        btnNext = MakeButton("Next", UIHelper.Success, 70, 32); btnNext.Top = 10;
         btnPrev.Click += (_, _) => { if (_currentPage > 1) { _currentPage--; RefreshGrid(); } };
         btnNext.Click += (_, _) => { if (_currentPage < GetTotalPages()) { _currentPage++; RefreshGrid(); } };
-        p.Controls.AddRange(new Control[] { btnPrev, lblPage, btnNext }); return p;
+
+        bar.Controls.AddRange(new Control[] { lblTotal, lblShow, cboPerPage, lblRppCount, lblPageInfo, btnPrev, btnNext });
+        bar.Resize += (_, _) =>
+        {
+            lblTotal.Left = 16;
+            int gw = lblShow.Width + 4 + cboPerPage.Width + 4 + lblRppCount.Width;
+            int cx = (bar.Width - gw) / 2;
+            lblShow.Left = cx; cboPerPage.Left = lblShow.Right + 4; lblRppCount.Left = cboPerPage.Right + 4;
+            btnNext.Left = bar.Width - btnNext.Width - 16; btnPrev.Left = btnNext.Left - btnPrev.Width - 8;
+            lblPageInfo.Left = btnPrev.Left - lblPageInfo.Width - 16; lblPageInfo.Top = 18;
+        };
+        return bar;
     }
 
-    private int GetTotalPages() => Math.Max(1, (int)Math.Ceiling(_filtered.Count / (double)_pageSize));
+    // ── Cell painting ─────────────────────────────────────────────────────────
+    private void DgvCellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
+    {
+        if (e.RowIndex == -1)
+        {
+            e.PaintBackground(e.CellBounds, false); e.PaintContent(e.CellBounds);
+            using var pen = new Pen(UIHelper.Accent, 2f);
+            e.Graphics.DrawLine(pen, e.CellBounds.Left, e.CellBounds.Bottom - 2, e.CellBounds.Right, e.CellBounds.Bottom - 2);
+            e.Handled = true; return;
+        }
+        if (e.RowIndex >= 0 && e.ColumnIndex >= 0 && dgv.Columns[e.ColumnIndex].Name == "ColAction")
+        {
+            UIHelper.PaintDynamicActionColumn(dgv, e, "View", "Edit");
+            return;
+        }
+    }
 
+    // ── Data ──────────────────────────────────────────────────────────────────
     private void LoadData()
     {
         try { _data = DataStore.GetMedicalRecords() ?? []; }
@@ -117,81 +221,71 @@ public class MedicalRecordForm : Form
 
     private void RefreshGrid()
     {
-        if (_filtered.Count == 0)
-        {
-            dgv.DataSource = null; lblStatus.Text = "0 records";
-            btnPrev.Enabled = btnNext.Enabled = false; btnPrev.Visible = btnNext.Visible = lblPage.Visible = false;
-            lblNoData.Visible = true; dgv.Visible = false; return;
-        }
-        lblNoData.Visible = false; dgv.Visible = true;
-        var page = _filtered.Skip((_currentPage - 1) * _pageSize).Take(_pageSize)
-            .Select(x => new
+        int total = _filtered.Count;
+        bool empty = total == 0;
+        lblNoData.Visible = empty; dgv.Visible = !empty;
+        lblTotal.Text = $"Total records: {total}";
+        int totalPages = GetTotalPages();
+        btnPrev.Enabled = _currentPage > 1; btnNext.Enabled = _currentPage < totalPages;
+
+        if (empty) { lblPageInfo.Text = "Showing page 1 of 1 Pages"; lblRppCount.Text = "(0) Records per page"; return; }
+
+        int skip = (_currentPage - 1) * _pageSize;
+        var page = _filtered.Skip(skip).Take(_pageSize)
+            .Select((x, i) => new
             {
+                No = skip + i + 1,
                 x.Id,
                 Date      = x.CreatedAt.ToString("yyyy-MM-dd"),
-                x.PetName,
+                Patient   = x.PetName,
                 Owner     = x.CustomerName,
                 Vet       = x.VetName,
                 Diagnosis = x.Diagnosis.Length > 60 ? x.Diagnosis[..57] + "..." : x.Diagnosis,
                 FollowUp  = x.FollowUpDate?.ToString("yyyy-MM-dd") ?? "-"
             }).ToList();
+
         dgv.DataSource = page;
-        if (dgv.Columns["Id"]        != null) dgv.Columns["Id"].Visible = false;
-        if (dgv.Columns["Date"]      is { } c1) c1.HeaderText = "Date";
-        if (dgv.Columns["PetName"]   is { } c2) c2.HeaderText = "Patient";
-        if (dgv.Columns["Owner"]     is { } c3) c3.HeaderText = "Owner";
-        if (dgv.Columns["Vet"]       is { } c4) c4.HeaderText = "Veterinarian";
-        if (dgv.Columns["Diagnosis"] is { } c5) c5.HeaderText = "Diagnosis";
-        if (dgv.Columns["FollowUp"]  is { } c6) c6.HeaderText = "Follow-up";
+        if (dgv.Columns["Id"] is { } cId) cId.Visible = false;
+        if (dgv.Columns["No"] is { } cNo) { cNo.HeaderText = "#"; cNo.FillWeight = 5; }
+        if (dgv.Columns["Date"] is { } cDate) { cDate.HeaderText = "Date"; cDate.FillWeight = 12; }
+        if (dgv.Columns["Patient"] is { } cPat) { cPat.HeaderText = "Patient"; cPat.FillWeight = 15; }
+        if (dgv.Columns["Owner"] is { } cOwn) { cOwn.HeaderText = "Owner"; cOwn.FillWeight = 15; }
+        if (dgv.Columns["Vet"] is { } cVet) { cVet.HeaderText = "Veterinarian"; cVet.FillWeight = 15; }
+        if (dgv.Columns["Diagnosis"] is { } cDiag) { cDiag.HeaderText = "Diagnosis"; cDiag.FillWeight = 25; }
+        if (dgv.Columns["FollowUp"] is { } cFol) { cFol.HeaderText = "Follow-up"; cFol.FillWeight = 13; }
+
         if (!dgv.Columns.Contains("ColAction"))
-            dgv.Columns.Add(new DataGridViewTextBoxColumn { Name = "ColAction", HeaderText = "", ReadOnly = true });
-        DistributeColumns();
-        int tp = GetTotalPages();
-        lblStatus.Text = $"{_filtered.Count} records"; lblPage.Text = $"Page {_currentPage} / {tp}";
-        btnPrev.Enabled = _currentPage > 1; btnNext.Enabled = _currentPage < tp;
-        btnPrev.Visible = btnNext.Visible = lblPage.Visible = tp > 1;
+            dgv.Columns.Add(new DataGridViewTextBoxColumn { Name = "ColAction", HeaderText = "Action", ReadOnly = true, FillWeight = 15 });
+
+        lblPageInfo.Text = $"Showing page {_currentPage} of {totalPages} Pages";
+        lblRppCount.Text = $"({Math.Min(_pageSize, total - skip)}) Records per page";
     }
 
-    private void DistributeColumns()
-    {
-        if (dgv.Columns.Count == 0) return;
-        const int actionW     = 130;
-        const int totalWeight = 800; // 100+120+140+140+200+100
-        int available = dgv.ClientSize.Width - actionW - 2;
-        if (available <= 0) return;
-        if (dgv.Columns["ColAction"] is { } ca) { ca.Width = actionW; ca.DisplayIndex = dgv.Columns.Count - 1; }
-        if (dgv.Columns["Date"]      is { } c1) c1.Width = available * 100 / totalWeight;
-        if (dgv.Columns["PetName"]   is { } c2) c2.Width = available * 120 / totalWeight;
-        if (dgv.Columns["Owner"]     is { } c3) c3.Width = available * 140 / totalWeight;
-        if (dgv.Columns["Vet"]       is { } c4) c4.Width = available * 140 / totalWeight;
-        if (dgv.Columns["Diagnosis"] is { } c5) c5.Width = available * 200 / totalWeight;
-        if (dgv.Columns["FollowUp"]  is { } c6) c6.Width = available * 100 / totalWeight;
-    }
+    private int GetTotalPages() => Math.Max(1, (int)Math.Ceiling(_filtered.Count / (double)_pageSize));
 
     private void BtnAdd_Click(object? s, EventArgs e)
     {
         using var dlg = new MedicalRecordDialog();
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
-        try
-        {
-            DataStore.Insert(dlg.Result);
-            DataStore.SaveRecordMedications(dlg.Result.Id, dlg.Prescriptions);
-        }
+        try { DataStore.Insert(dlg.Result); DataStore.SaveRecordMedications(dlg.Result.Id, dlg.Prescriptions); }
         catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
         VetMS.Forms.Toast.Success("Medical record saved!"); LoadData();
     }
 
-    private void ViewRow(int row)
+    private void ViewRow(int rowIndex)
     {
-        if (dgv.Rows[row].Cells["Id"]?.Value is not int id) return;
-        var item = _data.FirstOrDefault(x => x.Id == id); if (item is null) return;
-        using var dlg = new MedicalRecordDialog(item, readOnly: true);
-        dlg.ShowDialog(this);
+        if (rowIndex < 0 || rowIndex >= dgv.Rows.Count) return;
+        if (dgv.Rows[rowIndex].Cells["Id"]?.Value is not int id) return;
+        var item = _data.FirstOrDefault(x => x.Id == id); 
+        if (item is null) return;
+
+        MainForm.Instance.LoadForm(new MedicalRecordDetailForm(item, () => MainForm.Instance.LoadForm(new MedicalRecordForm())));
     }
 
-    private void EditRow(int row)
+    private void EditRow(int rowIndex)
     {
-        if (dgv.Rows[row].Cells["Id"]?.Value is not int id) return;
+        if (rowIndex < 0 || rowIndex >= dgv.Rows.Count) return;
+        if (dgv.Rows[rowIndex].Cells["Id"]?.Value is not int id) return;
         var item = _data.FirstOrDefault(x => x.Id == id); if (item is null) return;
         using var dlg = new MedicalRecordDialog(item);
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
@@ -200,13 +294,38 @@ public class MedicalRecordForm : Form
         item.CustomerId = r.CustomerId; item.CustomerName = r.CustomerName;
         item.VetId = r.VetId; item.VetName = r.VetName;
         item.Diagnosis = r.Diagnosis; item.Treatment = r.Treatment; item.Notes = r.Notes; item.FollowUpDate = r.FollowUpDate;
-        try
-        {
-            DataStore.Update(item);
-            DataStore.SaveRecordMedications(item.Id, dlg.Prescriptions);
-        }
+        try { DataStore.Update(item); DataStore.SaveRecordMedications(item.Id, dlg.Prescriptions); }
         catch (Exception ex) { VetMS.Forms.CustomMessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
         VetMS.Forms.Toast.Success("Medical record updated!"); LoadData();
+    }
+
+    private static Button MakeButton(string text, Color back, int w, int h)
+    {
+        var btn = new Button
+        {
+            Text = text, Width = w, Height = h, BackColor = back, ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand, Font = new Font("Segoe UI", 9f, FontStyle.Bold)
+        };
+        btn.FlatAppearance.BorderSize = 0; btn.FlatAppearance.MouseOverBackColor = ControlPaint.Dark(back, 0.1f);
+        ApplyRound(btn, 6); btn.SizeChanged += (_, _) => ApplyRound(btn, 6); return btn;
+    }
+
+    private static void ApplyRound(Control c, int r)
+    {
+        if (c.Width <= 0 || c.Height <= 0) return;
+        c.Region = new Region(RoundRect(new Rectangle(0, 0, c.Width, c.Height), r));
+    }
+
+    private static System.Drawing.Drawing2D.GraphicsPath RoundRect(Rectangle rc, int r)
+    {
+        int d = r * 2;
+        var p = new System.Drawing.Drawing2D.GraphicsPath();
+        p.AddArc(rc.Left, rc.Top, d, d, 180, 90);
+        p.AddArc(rc.Right - d, rc.Top, d, d, 270, 90);
+        p.AddArc(rc.Right - d, rc.Bottom - d, d, d, 0, 90);
+        p.AddArc(rc.Left, rc.Bottom - d, d, d, 90, 90);
+        p.CloseFigure();
+        return p;
     }
 }
 

@@ -7,6 +7,7 @@ namespace VetMS.Forms;
 
 public class MainForm : Form
 {
+    public static MainForm Instance { get; private set; } = null!;
     private readonly User _currentUser;
     private Panel pnlSidebar = null!;
     private Panel pnlContent = null!;
@@ -32,6 +33,7 @@ public class MainForm : Form
 
     public MainForm(User user)
     {
+        Instance = this;
         _currentUser = user;
         InitializeUI();
         CaptureBaseFonts(this);
@@ -108,7 +110,7 @@ public class MainForm : Form
         var lblDate = new Label
         {
             Text      = DateTime.Today.ToString("dddd, MMMM dd, yyyy"),
-            ForeColor = Color.FromArgb(175, 210, 240),
+            ForeColor = Theme.AppTheme.SubtitleText,
             Font      = new Font("Segoe UI", 8.5f),
             AutoSize  = true
         };
@@ -150,7 +152,7 @@ public class MainForm : Form
             Left      = 0, Top = 0,
             Width     = SidebarW, Height = cardH,
             Cursor    = Cursors.Hand,
-            BackColor = Color.FromArgb(18, 255, 255, 255)    // subtle tint
+            BackColor = Theme.AppTheme.SidebarCard
         };
 
         _picSidebarUser = new PictureBox
@@ -175,7 +177,7 @@ public class MainForm : Form
         _lblSidebarEmail = new Label
         {
             Text      = _currentUser.Email,
-            ForeColor = Color.FromArgb(140, 165, 195),
+            ForeColor = Theme.AppTheme.SubtitleText,
             Font      = new Font("Segoe UI", 8f),
             AutoSize  = true,
             Left      = 66, Top = 43,
@@ -196,8 +198,8 @@ public class MainForm : Form
 
         // Hover + click wiring
         Action click  = () => LoadForm(new UserProfileForm(_currentUser, RefreshSidebarProfile));
-        Action hover  = () => pnlCard.BackColor = UIHelper.SideHover;
-        Action unhover = () => pnlCard.BackColor = Color.FromArgb(18, 255, 255, 255);
+        Action hover  = () => pnlCard.BackColor = Theme.AppTheme.SidebarHover;
+        Action unhover = () => pnlCard.BackColor = Theme.AppTheme.SidebarCard;
 
         foreach (Control c in new Control[] { pnlCard, _picSidebarUser, lblName, lblRole })
         {
@@ -349,7 +351,7 @@ public class MainForm : Form
                 }
             }
             // Activate this one
-            wrap.BackColor = Color.FromArgb(28, 255, 255, 255);
+            wrap.BackColor = Theme.AppTheme.SidebarHover;
             accent.Visible = true;
             lblIcon.ForeColor = Color.White;
             lblText.ForeColor = Color.White;
@@ -430,7 +432,7 @@ public class MainForm : Form
     // ═══════════════════════════════════════════════════════════════════════════
     //  FORM LOADER
     // ═══════════════════════════════════════════════════════════════════════════
-    private void LoadForm(Form form)
+    public void LoadForm(Form form)
     {
         _currentChild?.Close();
         _currentChild?.Dispose();

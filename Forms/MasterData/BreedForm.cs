@@ -467,7 +467,7 @@ public class BreedDialog : Form
     {
         bool isEdit     = existing != null;
         Text            = isEdit ? "Edit Breed" : "Add Breed";
-        Size            = new Size(500, isEdit ? 424 : 400);
+        Size            = new Size(500, isEdit ? 490 : 490);
         StartPosition   = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox     = false; MinimizeBox = false;
@@ -476,7 +476,7 @@ public class BreedDialog : Form
         _species = DataStore.GetAnimalSpecies().Where(x => x.IsActive).ToList();
 
         // ── Header ────────────────────────────────────────────────────────────
-        var header = new Panel { Dock = DockStyle.Top, Height = 56, BackColor = UIHelper.Primary };
+        var header = new Panel { Dock = DockStyle.Top, Height = 90, BackColor = UIHelper.Primary };
         var lblTitle = new Label { Text = isEdit ? "Edit Breed" : "Add New Breed", Font = new Font("Segoe UI", 13f, FontStyle.Bold), ForeColor = Color.White, AutoSize = true };
         var lblSub   = new Label { Text = isEdit ? "Update breed information" : "Fill in the details below", Font = new Font("Segoe UI", 8.5f), ForeColor = Color.FromArgb(180, 210, 240), AutoSize = true };
         header.Controls.AddRange(new Control[] { lblTitle, lblSub });
@@ -497,21 +497,6 @@ public class BreedDialog : Form
 
         body.Controls.Add(FieldLabel("Description", lm, y));  y += 22;
         txtDesc = StyledTextBox(lm, y, multiline: true); body.Controls.Add(txtDesc); y += 90;
-
-        if (!isEdit)
-        {
-            chkActive = new CheckBox { Text = "Active", Checked = true, Left = lm, Top = y, Font = new Font("Segoe UI", 9.5f), AutoSize = true };
-            body.Controls.Add(chkActive);
-        }
-
-        if (isEdit)
-        {
-            y += 36;
-            body.Controls.Add(new Panel { Left = lm, Top = y, Width = 432, Height = 1, BackColor = Color.FromArgb(225, 230, 240) });
-            y += 14;
-            body.Controls.Add(TsLabel("Created At", existing!.CreatedAt.ToString("MMM dd, yyyy  HH:mm"), lm,       y));
-            body.Controls.Add(TsLabel("Updated At", existing.UpdatedAt?.ToString("MMM dd, yyyy  HH:mm") ?? "—", lm + 220, y));
-        }
 
         // ── Footer ────────────────────────────────────────────────────────────
         var footer = new Panel { Dock = DockStyle.Bottom, Height = 58, BackColor = Color.FromArgb(248, 249, 251) };
@@ -580,6 +565,26 @@ public class BreedDialog : Form
         };
         btn.FlatAppearance.BorderSize = 0;
         btn.FlatAppearance.MouseOverBackColor = ControlPaint.Dark(back, 0.1f);
+        ApplyRound(btn, 6);
+        btn.SizeChanged += (_, _) => ApplyRound(btn, 6);
         return btn;
+    }
+
+    private static void ApplyRound(Control c, int r)
+    {
+        if (c.Width <= 0 || c.Height <= 0) return;
+        c.Region = new Region(RoundRect(new Rectangle(0, 0, c.Width, c.Height), r));
+    }
+
+    private static GraphicsPath RoundRect(Rectangle rc, int r)
+    {
+        int d = r * 2;
+        var p = new GraphicsPath();
+        p.AddArc(rc.Left, rc.Top, d, d, 180, 90);
+        p.AddArc(rc.Right - d, rc.Top, d, d, 270, 90);
+        p.AddArc(rc.Right - d, rc.Bottom - d, d, d, 0, 90);
+        p.AddArc(rc.Left, rc.Bottom - d, d, d, 90, 90);
+        p.CloseFigure();
+        return p;
     }
 }

@@ -9,7 +9,7 @@ public class LoginForm : Form
     private TextBox txtUsername = null!;
     private TextBox txtPassword = null!;
 
-    private static readonly Color ClinicTeal = Color.FromArgb(0, 169, 157);
+    private static Color ClinicTeal => Theme.AppTheme.BrandTeal;
 
     public LoginForm()
     {
@@ -76,7 +76,7 @@ public class LoginForm : Form
         {
             Text      = "Sign in to your account",
             Font      = new Font("Segoe UI", 9.5f),
-            ForeColor = Color.FromArgb(160, 170, 185),
+            ForeColor = Color.FromArgb(140, 150, 160),
             AutoSize  = false,
             Width     = 320,
             Height    = 22,

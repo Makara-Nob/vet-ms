@@ -488,7 +488,7 @@ public class ServiceTypeDialog : Form
         bool isEdit = existing != null;
 
         Text = isEdit ? "Edit Service Type" : "Add Service Type";
-        Size = new Size(500, isEdit ? 490 : 490);
+        Size = new Size(500, isEdit ? 530 : 530);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -499,7 +499,7 @@ public class ServiceTypeDialog : Form
         var header = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 56,
+            Height = 90,
             BackColor = UIHelper.Primary
         };
 
@@ -582,40 +582,6 @@ public class ServiceTypeDialog : Form
         txtDesc = StyledTextBox(lm, y, true);
         body.Controls.Add(txtDesc);
         y += 90;
-
-        if (!isEdit)
-        {
-            chkActive = new CheckBox
-            {
-                Text = "Active",
-                Checked = true,
-                Left = lm,
-                Top = y,
-                Font = new Font("Segoe UI", 9.5f),
-                AutoSize = true
-            };
-            body.Controls.Add(chkActive);
-        }
-
-        if (isEdit)
-        {
-            y += 10;
-            body.Controls.Add(new Panel
-            {
-                Left = lm,
-                Top = y,
-                Width = 432,
-                Height = 1,
-                BackColor = Color.FromArgb(225, 230, 240)
-            });
-
-            y += 14;
-            body.Controls.Add(TsLabel("Created At",
-                existing!.CreatedAt.ToString("MMM dd, yyyy  HH:mm"), lm, y));
-
-            body.Controls.Add(TsLabel("Updated At",
-                existing.UpdatedAt?.ToString("MMM dd, yyyy  HH:mm") ?? "—", lm + 220, y));
-        }
 
         // Footer
         var footer = new Panel
@@ -766,7 +732,26 @@ public class ServiceTypeDialog : Form
 
         btn.FlatAppearance.BorderSize = 0;
         btn.FlatAppearance.MouseOverBackColor = ControlPaint.Dark(back, 0.1f);
-
+        ApplyRound(btn, 6);
+        btn.SizeChanged += (_, _) => ApplyRound(btn, 6);
         return btn;
+    }
+
+    private static void ApplyRound(Control c, int r)
+    {
+        if (c.Width <= 0 || c.Height <= 0) return;
+        c.Region = new Region(RoundRect(new Rectangle(0, 0, c.Width, c.Height), r));
+    }
+
+    private static GraphicsPath RoundRect(Rectangle rc, int r)
+    {
+        int d = r * 2;
+        var p = new GraphicsPath();
+        p.AddArc(rc.Left, rc.Top, d, d, 180, 90);
+        p.AddArc(rc.Right - d, rc.Top, d, d, 270, 90);
+        p.AddArc(rc.Right - d, rc.Bottom - d, d, d, 0, 90);
+        p.AddArc(rc.Left, rc.Bottom - d, d, d, 90, 90);
+        p.CloseFigure();
+        return p;
     }
 }

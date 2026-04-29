@@ -231,9 +231,21 @@ public class AppointmentForm : Form
     private void ViewRow(int row)
     {
         if (dgv.Rows[row].Cells["Id"]?.Value is not int id) return;
-        var item = _data.FirstOrDefault(x => x.Id == id); if (item is null) return;
-        using var dlg = new AppointmentDialog(item, true);
-        dlg.ShowDialog(this);
+        var item = _data.FirstOrDefault(x => x.Id == id); 
+        if (item is null) return;
+
+        var pet = DataStore.GetPets().FirstOrDefault(p => p.Id == item.PetId);
+        if (pet != null)
+        {
+            // Load PetDetailsForm on tab 1 (Appointments)
+            MainForm.Instance.LoadForm(new PetDetailsForm(pet, () => MainForm.Instance.LoadForm(new AppointmentForm()), 1));
+        }
+        else
+        {
+            // Fallback to dialog if pet not found
+            using var dlg = new AppointmentDialog(item, true);
+            dlg.ShowDialog(this);
+        }
     }
 
     private void EditRow(int row)

@@ -2,16 +2,16 @@ namespace VetMS.Forms;
 
 public static class UIHelper
 {
-    // Color palette
-    public static readonly Color Primary   = Color.FromArgb(26, 60, 94);       // Dark navy
-    public static readonly Color Accent    = Color.FromArgb(0, 120, 215);      // Bright blue
-    public static readonly Color Success   = Color.FromArgb(40, 167, 69);      // Green
-    public static readonly Color Danger    = Color.FromArgb(220, 53, 69);      // Red
-    public static readonly Color Warning   = Color.FromArgb(255, 193, 7);      // Amber
-    public static readonly Color LightBg   = Color.FromArgb(245, 247, 250);    // Off-white bg
-    public static readonly Color AltRow    = Color.FromArgb(232, 244, 253);    // Light blue row
-    public static readonly Color Sidebar   = Color.FromArgb(18, 44, 70);       // Darker navy
-    public static readonly Color SideHover = Color.FromArgb(0, 80, 150);       // Hover state
+    // Color palette - Now using global AppTheme
+    public static Color Primary   => Theme.AppTheme.Primary;
+    public static Color Accent    => Theme.AppTheme.Accent;
+    public static Color Success   => Theme.AppTheme.Success;
+    public static Color Danger    => Theme.AppTheme.Danger;
+    public static Color Warning   => Theme.AppTheme.Warning;
+    public static Color LightBg   => Theme.AppTheme.LightBg;
+    public static Color AltRow    => Theme.AppTheme.AltRow;
+    public static Color Sidebar   => Theme.AppTheme.Sidebar;
+    public static Color SideHover => Theme.AppTheme.SidebarHover;
 
     public static Button CreateButton(string text, Color back, int width = 90, int height = 32)
     {
@@ -74,7 +74,7 @@ public static class UIHelper
         var lblSub = new Label
         {
             Text = subtitle,
-            ForeColor = Color.FromArgb(170, 200, 230),
+            ForeColor = Theme.AppTheme.SubtitleText,
             Font = new Font("Segoe UI", 8.5f),
             AutoSize = true,
             Left = 16,

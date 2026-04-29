@@ -79,7 +79,7 @@ public class CustomMessageBox : Form
             Cursor = Cursors.Hand
         };
         btnClose.Click += (_, _) => { this._result = DialogResult.Cancel; this.Close(); };
-        btnClose.MouseEnter += (_, _) => btnClose.BackColor = Color.FromArgb(40, 80, 120);
+        btnClose.MouseEnter += (_, _) => btnClose.BackColor = Theme.AppTheme.HeaderHover;
         btnClose.MouseLeave += (_, _) => btnClose.BackColor = Color.Transparent;
 
         pnlHeader.Controls.Add(lblTitle);
@@ -177,12 +177,12 @@ public class CustomMessageBox : Form
     {
         if (_buttons == MessageBoxButtons.OKCancel || _buttons == MessageBoxButtons.YesNoCancel)
         {
-            flp.Controls.Add(CreateActionBtn("Cancel", DialogResult.Cancel, Color.FromArgb(108, 117, 125)));
+            flp.Controls.Add(CreateActionBtn("Cancel", DialogResult.Cancel, Theme.AppTheme.Neutral));
         }
 
         if (_buttons == MessageBoxButtons.YesNo || _buttons == MessageBoxButtons.YesNoCancel)
         {
-            flp.Controls.Add(CreateActionBtn("No", DialogResult.No, Color.FromArgb(108, 117, 125)));
+            flp.Controls.Add(CreateActionBtn("No", DialogResult.No, Theme.AppTheme.Neutral));
             flp.Controls.Add(CreateActionBtn("Yes", DialogResult.Yes, UIHelper.Success));
         }
 

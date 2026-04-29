@@ -19,7 +19,7 @@ public class Toast : Form
         TopMost         = true;
         ShowInTaskbar   = false;
         Opacity         = 0.95;
-        BackColor       = success ? Color.FromArgb(30, 160, 80) : Color.FromArgb(200, 50, 60);
+        BackColor       = success ? Theme.AppTheme.ToastSuccess : Theme.AppTheme.ToastError;
 
         // Rounded feel via double-buffer
         SetStyle(ControlStyles.OptimizedDoubleBuffer, true);

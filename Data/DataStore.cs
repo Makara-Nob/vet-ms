@@ -876,7 +876,7 @@ public static class DataStore
         using var cmd = new NpgsqlCommand(
             @"INSERT INTO cbc_records (pet_id,pet_name,customer_id,customer_name,test_date,
                                         rbc,hgb,hct,mcv,mch,mchc,plt,wbc,neu,lym,mon,eos,bas,remarks,metadata)
-              VALUES (@pid,@pn,@cid,@cn,@td,@rbc,@hgb,@hct,@mcv,@mch,@mchc,@plt,@wbc,@neu,@lym,@mon,@eos,@bas,@rem,@mt::jsonb) RETURNING id", conn);
+              VALUES (@pid,@pn,@cid,@cn,@td,@rbc,@hgb,@hct,@mcv,@mch,@mchc,@plt,@wbc,@neu,@lym,@mon,@eos,@bas,@rem,@mt) RETURNING id", conn);
         cmd.Parameters.AddWithValue("pid",  item.PetId);
         cmd.Parameters.AddWithValue("pn",   item.PetName);
         cmd.Parameters.AddWithValue("cid",  item.CustomerId);
@@ -895,8 +895,8 @@ public static class DataStore
         cmd.Parameters.AddWithValue("mon",  item.Mon);
         cmd.Parameters.AddWithValue("eos",  item.Eos);
         cmd.Parameters.AddWithValue("bas",  item.Bas);
-        cmd.Parameters.AddWithValue("rem",  item.Remarks);
-        cmd.Parameters.Add("mt", NpgsqlTypes.NpgsqlDbType.Jsonb).Value = (object?)item.Metadata ?? DBNull.Value;
+        cmd.Parameters.AddWithValue("rem",  item.Remarks ?? "");
+        cmd.Parameters.Add(new NpgsqlParameter("mt", NpgsqlTypes.NpgsqlDbType.Jsonb) { Value = (object?)item.Metadata ?? DBNull.Value });
         item.Id = (int)cmd.ExecuteScalar()!;
     }
 
