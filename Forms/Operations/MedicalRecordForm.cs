@@ -348,6 +348,7 @@ public class MedicalRecordDialog : Form
     private readonly bool _readOnly;
     private Appointment? _selectedAppointment;
     private List<object> _vetList = [];
+    private bool _medFilterBusy;
 
     public MedicalRecord Result { get; private set; } = new();
     public List<(int MedId, string Dosage, string Notes)> Prescriptions { get; private set; } = [];
@@ -361,7 +362,7 @@ public class MedicalRecordDialog : Form
         int formWidth  = Math.Min(1180, (int)(screen.WorkingArea.Width  * 0.88));
         int formHeight = Math.Min(900,  (int)(screen.WorkingArea.Height * 0.92));
         Size = new Size(formWidth, formHeight);
-        MinimumSize = new Size(960, 700);
+        MinimumSize = new Size(1220, 700);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false;
@@ -652,6 +653,7 @@ public class MedicalRecordDialog : Form
             new DataGridViewTextBoxColumn  { Name = "PNotes",     HeaderText = "Pharmacy Notes",        FillWeight = 40 }
         );
         UIHelper.StyleGrid(dgvMeds);
+        dgvMeds.EditingControlShowing += MedGrid_EditingControlShowing;
         rightFlow.Controls.Add(dgvMeds);
 
         if (!_readOnly)
@@ -778,6 +780,41 @@ public class MedicalRecordDialog : Form
         p.AddArc(rc.Left, rc.Bottom - d, d, d, 90, 90);
         p.CloseFigure();
         return p;
+    }
+
+    // ── Medication search helpers ─────────────────────────────────────────────
+
+    private void MedGrid_EditingControlShowing(object? s, DataGridViewEditingControlShowingEventArgs e)
+    {
+        if (dgvMeds.CurrentCell?.OwningColumn.Name != "Medication") return;
+        if (e.Control is not ComboBox cbo) return;
+        cbo.DropDownStyle = ComboBoxStyle.DropDown;
+        cbo.MaxDropDownItems = 10;
+        cbo.AutoCompleteMode = AutoCompleteMode.Off;
+        cbo.KeyUp -= MedCbo_KeyUp;
+        cbo.KeyUp += MedCbo_KeyUp;
+    }
+
+    private void MedCbo_KeyUp(object? s, KeyEventArgs e)
+    {
+        if (_medFilterBusy || s is not ComboBox cbo) return;
+        if (e.KeyCode is Keys.Down or Keys.Up or Keys.Enter or Keys.Escape or Keys.Tab) return;
+
+        _medFilterBusy = true;
+        try
+        {
+            var q = cbo.Text;
+            var hits = string.IsNullOrWhiteSpace(q)
+                ? _meds
+                : _meds.Where(m => m.Name?.ToLower().Contains(q.ToLower()) == true).ToList();
+            cbo.DataSource = hits;
+            cbo.DisplayMember = "Name";
+            cbo.ValueMember = "Id";
+            cbo.Text = q;
+            cbo.Select(q.Length, 0);
+            if (hits.Count > 0) BeginInvoke(() => { if (!cbo.IsDisposed) cbo.DroppedDown = true; });
+        }
+        finally { _medFilterBusy = false; }
     }
 
     // ── Appointment grid helpers ──────────────────────────────────────────────
