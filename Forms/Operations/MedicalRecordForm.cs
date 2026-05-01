@@ -652,6 +652,27 @@ public class MedicalRecordDialog : Form
             new DataGridViewTextBoxColumn  { Name = "Dosage",     HeaderText = "Dosage / Instructions", FillWeight = 50 },
             new DataGridViewTextBoxColumn  { Name = "PNotes",     HeaderText = "Pharmacy Notes",        FillWeight = 40 }
         );
+        if (!_readOnly)
+        {
+            var colDel = new DataGridViewButtonColumn
+            {
+                Name = "ColMedDel", HeaderText = "", Width = 36,
+                Text = "✕", UseColumnTextForButtonValue = true,
+                FlatStyle = FlatStyle.Flat,
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.None
+            };
+            colDel.DefaultCellStyle.BackColor          = Color.FromArgb(255, 235, 235);
+            colDel.DefaultCellStyle.ForeColor          = Color.FromArgb(190, 40, 40);
+            colDel.DefaultCellStyle.SelectionBackColor = Color.FromArgb(255, 210, 210);
+            colDel.DefaultCellStyle.SelectionForeColor = Color.FromArgb(190, 40, 40);
+            colDel.DefaultCellStyle.Font               = new Font("Segoe UI", 9f, FontStyle.Bold);
+            dgvMeds.Columns.Add(colDel);
+            dgvMeds.CellClick += (_, e) =>
+            {
+                if (e.RowIndex < 0 || dgvMeds.Columns[e.ColumnIndex].Name != "ColMedDel") return;
+                if (!dgvMeds.Rows[e.RowIndex].IsNewRow) dgvMeds.Rows.RemoveAt(e.RowIndex);
+            };
+        }
         UIHelper.StyleGrid(dgvMeds);
         dgvMeds.EditingControlShowing += MedGrid_EditingControlShowing;
         rightFlow.Controls.Add(dgvMeds);
@@ -676,7 +697,7 @@ public class MedicalRecordDialog : Form
         chkFollowUp = new CheckBox
         {
             Text = "Schedule a follow-up visit", Font = new Font("Segoe UI", 10f),
-            AutoSize = false, Width = 240, Height = 26, Cursor = Cursors.Hand
+            AutoSize = true, Height = 26, Cursor = Cursors.Hand
         };
         dtpFollowUp = new DateTimePicker
         {
