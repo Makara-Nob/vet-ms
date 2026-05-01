@@ -332,7 +332,7 @@ public class MedicalRecordForm : Form
 public class MedicalRecordDialog : Form
 {
     // ── Controls ───────────────────────────────────────────────────────────────
-    private readonly ComboBox cboVet;
+    private readonly ComboBox cboVet, cboApptFilter;
     private readonly TextBox txtDiagnosis, txtTreatment, txtNotes, txtApptSearch;
     private readonly DateTimePicker dtpFollowUp;
     private readonly CheckBox chkFollowUp;
@@ -446,6 +446,18 @@ public class MedicalRecordDialog : Form
             leftTitleBar.Resize += (_, _) => reqLabel.Left = leftTitleBar.Width - reqLabel.Width - 12;
         }
 
+        // Left filter bar
+        var filterWrap = new Panel { Dock = DockStyle.Top, Height = 38, BackColor = Color.FromArgb(247, 249, 252), Padding = new Padding(10, 6, 10, 0) };
+        cboApptFilter = new ComboBox
+        {
+            Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList,
+            Font = new Font("Segoe UI", 8.5f), BackColor = Color.White
+        };
+        cboApptFilter.Items.AddRange(new object[] { "Today & Upcoming", "All Records" });
+        cboApptFilter.SelectedIndex = 0;
+        cboApptFilter.SelectedIndexChanged += (_, _) => RefreshApptGrid();
+        filterWrap.Controls.Add(cboApptFilter);
+
         // Left search box
         var searchWrap = new Panel { Dock = DockStyle.Top, Height = 44, BackColor = Color.FromArgb(247, 249, 252), Padding = new Padding(10, 6, 10, 4) };
         var searchBox = new Panel { Dock = DockStyle.Fill, BackColor = Color.White };
@@ -534,8 +546,9 @@ public class MedicalRecordDialog : Form
 
         leftPanel.Controls.Add(dgvAppt);         // Fill — first
         leftPanel.Controls.Add(pnlSelectedCard); // Bottom
-        leftPanel.Controls.Add(searchWrap);      // Top (stacked after title)
-        leftPanel.Controls.Add(leftTitleBar);    // Top (appears above search)
+        leftPanel.Controls.Add(searchWrap);      // Top (stacked after filter)
+        leftPanel.Controls.Add(filterWrap);      // Top (stacked after title)
+        leftPanel.Controls.Add(leftTitleBar);    // Top (appears above filter)
 
         // ── RIGHT PANEL — Clinical data ───────────────────────────────────
         var rightScroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = Color.White };
@@ -771,9 +784,14 @@ public class MedicalRecordDialog : Form
 
     private void RefreshApptGrid()
     {
+        bool todayAndUpcoming = cboApptFilter.SelectedIndex == 0;
+        IEnumerable<Appointment> dateFiltered = todayAndUpcoming
+            ? _appointments.Where(a => a.AppointmentDate.Date >= DateTime.Today).OrderBy(a => a.AppointmentDate)
+            : _appointments; // already ordered descending
+
         var q = txtApptSearch.Text.Trim().ToLower();
-        var src = string.IsNullOrWhiteSpace(q) ? _appointments
-            : _appointments.Where(a =>
+        var src = string.IsNullOrWhiteSpace(q) ? dateFiltered
+            : dateFiltered.Where(a =>
                 a.PetName?.ToLower().Contains(q)         == true ||
                 a.CustomerName?.ToLower().Contains(q)    == true ||
                 a.ServiceTypeName?.ToLower().Contains(q) == true).ToList();
