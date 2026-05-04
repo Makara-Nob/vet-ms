@@ -811,7 +811,7 @@ public class MedicalRecordDialog : Form
         if (e.Control is not ComboBox cbo) return;
         cbo.DropDownStyle = ComboBoxStyle.DropDown;
         cbo.MaxDropDownItems = 10;
-        cbo.AutoCompleteMode = AutoCompleteMode.Off;
+        cbo.AutoCompleteMode = AutoCompleteMode.None;
         cbo.KeyUp -= MedCbo_KeyUp;
         cbo.KeyUp += MedCbo_KeyUp;
     }
