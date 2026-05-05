@@ -21,7 +21,7 @@
         <div class="toolbar">
             <div class="search-box">
                 <span class="search-icon">🔍</span>
-                <input placeholder="Search name, owner, microchip..." @bind="search" @bind:event="oninput" @oninput="Filter" />
+                <input placeholder="Search name, owner, microchip..." @bind="search" @bind:event="oninput" @bind:after="Filter" />
             </div>
             <select class="form-control" style="width:150px" @bind="filterSpecies" @bind:after="Filter">
                 <option value="0">All Species</option>

@@ -14,7 +14,7 @@
 <div class="card">
     <div class="card-body" style="padding-bottom:8px">
         <div class="toolbar">
-            <div class="search-box"><span class="search-icon">🔍</span><input placeholder="Search..." @bind="search" @bind:event="oninput" @oninput="Filter" /></div>
+            <div class="search-box"><span class="search-icon">🔍</span><input placeholder="Search..." @bind="search" @bind:event="oninput" @bind:after="Filter" /></div>
             <select class="form-control" style="width:150px" @bind="filterSpecies" @bind:after="Filter">
                 <option value="0">All Species</option>
                 @foreach (var s in species) { <option value="@s.Id">@s.Name</option> }

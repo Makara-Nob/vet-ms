@@ -18,7 +18,7 @@
         <div class="toolbar">
             <div class="search-box">
                 <span class="search-icon">🔍</span>
-                <input placeholder="Search name, phone, email..." @bind="search" @bind:event="oninput" @oninput="Filter" />
+                <input placeholder="Search name, phone, email..." @bind="search" @bind:event="oninput" @bind:after="Filter" />
             </div>
             <select class="form-control" style="width:140px" @bind="filterActive" @bind:after="Filter">
                 <option value="">All Status</option>

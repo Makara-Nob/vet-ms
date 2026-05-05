@@ -34,13 +34,12 @@ public static class CbcPdfExporter
                 age:        age,
                 ownerPhone: customer?.Phone  ?? "");
             File.WriteAllBytes(sfd.FileName, bytes);
-            VetMS.Forms.Toast.Success("PDF exported!");
             System.Diagnostics.Process.Start(
                 new System.Diagnostics.ProcessStartInfo(sfd.FileName) { UseShellExecute = true });
         }
         catch (Exception ex)
         {
-            VetMS.Forms.CustomMessageBox.Show($"Export failed: {ex.Message}", "Error",
+            System.Windows.Forms.MessageBox.Show($"Export failed: {ex.Message}", "Error",
                 System.Windows.Forms.MessageBoxButtons.OK,
                 System.Windows.Forms.MessageBoxIcon.Error);
         }

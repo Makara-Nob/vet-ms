@@ -55,7 +55,7 @@
 </div>
 
 @code {
-    ClinicSettings settings = new();
+    VetMS.Models.ClinicSettings settings = new();
     string error = "";
 
     protected override void OnInitialized()
@@ -64,7 +64,7 @@
         catch (Exception ex) { error = ex.Message; }
     }
 
-    void AddSocialLink() => settings.SocialLinks.Add(new SocialLink());
+    void AddSocialLink() => settings.SocialLinks.Add(new VetMS.Models.SocialLink());
 
     void Save()
     {

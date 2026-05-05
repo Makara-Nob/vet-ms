@@ -23,7 +23,7 @@
         <div class="toolbar">
             <div class="search-box">
                 <span class="search-icon">🔍</span>
-                <input placeholder="Search patient, diagnosis..." @bind="search" @bind:event="oninput" @oninput="Filter" />
+                <input placeholder="Search patient, diagnosis..." @bind="search" @bind:event="oninput" @bind:after="Filter" />
             </div>
         </div>
     </div>

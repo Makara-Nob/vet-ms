@@ -22,7 +22,7 @@
         <div class="toolbar">
             <div class="search-box">
                 <span class="search-icon">🔍</span>
-                <input placeholder="Search patient, customer..." @bind="search" @bind:event="oninput" @oninput="Filter" />
+                <input placeholder="Search patient, customer..." @bind="search" @bind:event="oninput" @bind:after="Filter" />
             </div>
             <select class="form-control" style="width:160px" @bind="filterStatus" @bind:after="Filter">
                 <option value="">All Statuses</option>
