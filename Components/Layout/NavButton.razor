@@ -1,0 +1,17 @@
+@inject NavigationManager Nav
+
+<button class="nav-item @(IsActive ? "active" : "")" @onclick="Navigate">
+    <span class="nav-icon">@Icon</span>
+    <span>@Label</span>
+</button>
+
+@code {
+    [Parameter] public string Href { get; set; } = "";
+    [Parameter] public string Icon { get; set; } = "";
+    [Parameter] public string Label { get; set; } = "";
+
+    bool IsActive => Nav.Uri.EndsWith(Href, StringComparison.OrdinalIgnoreCase) ||
+                     (Href != "/dashboard" && Nav.Uri.Contains(Href, StringComparison.OrdinalIgnoreCase));
+
+    void Navigate() => Nav.NavigateTo(Href);
+}

@@ -1,0 +1,93 @@
+@page "/profile"
+@inject AppStateService AppState
+@inject IUserService Svc
+@inject ToastService Toast
+
+@{AppState.PageTitle = "My Profile";}
+
+<div class="page-header">
+    <div><div class="page-title">My Profile</div></div>
+</div>
+
+<div class="card" style="max-width:560px">
+    <div class="card-body">
+        <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:24px">
+            <div class="avatar" style="width:80px;height:80px;font-size:28px;margin-bottom:12px">
+                @if (avatarBytes?.Length > 0)
+                {
+                    <img src="data:image/png;base64,@Convert.ToBase64String(avatarBytes)" />
+                }
+                else
+                {
+                    @GetInitial()
+                }
+            </div>
+            <InputFile OnChange="OnFileChanged" accept="image/*" style="font-size:12px" />
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label class="form-label">Username</label><input class="form-control" @bind="username" disabled /></div>
+            <div class="form-group"><label class="form-label">Full Name *</label><input class="form-control" @bind="fullName" /></div>
+        </div>
+        <div class="form-group"><label class="form-label">Email</label><input class="form-control" type="email" @bind="email" /></div>
+        <hr class="divider" />
+        <div class="form-group"><label class="form-label">New Password (leave blank to keep current)</label><input class="form-control" type="password" @bind="newPassword" /></div>
+        @if (!string.IsNullOrEmpty(error)) { <div class="login-error">⚠️ @error</div> }
+    </div>
+    <div class="modal-footer" style="border-top:1px solid var(--border)">
+        <button class="btn btn-primary" @onclick="Save">Save Profile</button>
+    </div>
+</div>
+
+@code {
+    string username = "", fullName = "", email = "", newPassword = "", error = "";
+    byte[]? avatarBytes;
+
+    protected override void OnInitialized()
+    {
+        if (AppState.CurrentUser != null)
+        {
+            username = AppState.CurrentUser.Username;
+            fullName = AppState.CurrentUser.FullName;
+            email = AppState.CurrentUser.Email ?? "";
+            avatarBytes = AppState.CurrentUser.ProfilePicture;
+        }
+    }
+
+    string GetInitial() => string.IsNullOrEmpty(AppState.CurrentUser?.FullName) ? "?" :
+                           AppState.CurrentUser.FullName[0].ToString().ToUpper();
+
+    async Task OnFileChanged(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file.Size > 2 * 1024 * 1024) { error = "Image must be under 2MB."; return; }
+        using var ms = new MemoryStream();
+        await file.OpenReadStream(2 * 1024 * 1024).CopyToAsync(ms);
+        avatarBytes = ms.ToArray();
+    }
+
+    void Save()
+    {
+        error = "";
+        if (string.IsNullOrWhiteSpace(fullName)) { error = "Full name is required."; return; }
+        if (AppState.CurrentUser == null) return;
+        var user = new User
+        {
+            Id = AppState.CurrentUser.Id,
+            Username = AppState.CurrentUser.Username,
+            FullName = fullName,
+            Email = email,
+            Role = AppState.CurrentUser.Role,
+            IsActive = AppState.CurrentUser.IsActive,
+            ProfilePicture = avatarBytes,
+            PasswordHash = newPassword
+        };
+        try
+        {
+            Svc.Update(user);
+            AppState.UpdateCurrentUser(user);
+            Toast.Success("Profile updated.");
+            newPassword = "";
+        }
+        catch (Exception ex) { error = ex.Message; }
+    }
+}

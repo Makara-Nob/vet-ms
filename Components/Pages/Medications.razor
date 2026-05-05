@@ -1,0 +1,112 @@
+@page "/medications"
+@inject AppStateService AppState
+@inject IMedicationService Svc
+@inject ToastService Toast
+
+@{AppState.PageTitle = "Medications";}
+
+<div class="page-header">
+    <div><div class="page-title">Medications</div></div>
+    <button class="btn btn-primary" @onclick="() => OpenModal(null)">+ New Medication</button>
+</div>
+
+<div class="card">
+    <div class="card-body" style="padding-bottom:8px">
+        <div class="toolbar">
+            <div class="search-box"><span class="search-icon">🔍</span><input placeholder="Search..." @bind="search" @bind:event="oninput" @oninput="Filter" /></div>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>#</th><th>Name</th><th>Category</th><th>Dosage Form</th><th>Unit</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+                @if (filtered.Count == 0)
+                { <tr><td colspan="7"><div class="empty-state"><div class="empty-icon">💊</div><div class="empty-msg">No medications found.</div></div></td></tr> }
+                @foreach (var m in filtered)
+                {
+                    <tr>
+                        <td class="text-muted text-sm">@m.Id</td>
+                        <td><strong>@m.Name</strong></td>
+                        <td>@m.Category</td>
+                        <td>@m.DosageForm</td>
+                        <td>@m.Unit</td>
+                        <td><span class="badge @(m.IsActive?"badge-success":"badge-gray")">@(m.IsActive?"Active":"Inactive")</span></td>
+                        <td><div class="td-actions">
+                            <button class="btn btn-sm btn-secondary" @onclick="() => OpenModal(m)">Edit</button>
+                            <button class="btn btn-sm btn-danger" @onclick="() => AskDelete(m)">Delete</button>
+                        </div></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (showModal)
+{
+    <div class="modal-overlay" @onclick="CloseModal">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header"><span>@(editing.Id==0?"New Medication":"Edit Medication")</span><button class="modal-close" @onclick="CloseModal">✕</button></div>
+            <div class="modal-body">
+                <div class="form-group"><label class="form-label">Name *</label><input class="form-control" @bind="editing.Name" /></div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Category</label><input class="form-control" @bind="editing.Category" placeholder="e.g. Antibiotic" /></div>
+                    <div class="form-group"><label class="form-label">Dosage Form</label><input class="form-control" @bind="editing.DosageForm" placeholder="e.g. Tablet, Injection" /></div>
+                </div>
+                <div class="form-group"><label class="form-label">Unit</label><input class="form-control" @bind="editing.Unit" placeholder="e.g. mg, ml" /></div>
+                <div class="form-group"><label class="form-label">Description</label><textarea class="form-control" rows="2" @bind="editing.Description"></textarea></div>
+                <div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" @bind="editing.IsActive" /> Active</label></div>
+                @if (!string.IsNullOrEmpty(formError)) { <div class="login-error">⚠️ @formError</div> }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                <button class="btn btn-primary" @onclick="Save">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+<ConfirmModal Visible="showConfirm" Title="Delete Medication" Message="@($"Delete {deleteTarget?.Name}?")"
+    OnConfirm="ConfirmDelete" OnCancel="() => showConfirm = false" />
+
+@code {
+    List<Medication> all = [], filtered = [];
+    string search = "", formError = "";
+    bool showModal, showConfirm;
+    Medication editing = new();
+    Medication? deleteTarget;
+
+    protected override void OnInitialized() => Load();
+    void Load() { all = Svc.GetAll(); Filter(); }
+    void Filter() => filtered = all.Where(m => string.IsNullOrEmpty(search) || m.Name.Contains(search, StringComparison.OrdinalIgnoreCase) || m.Category.Contains(search, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    void OpenModal(Medication? m)
+    {
+        formError = "";
+        editing = m == null ? new Medication { IsActive = true } :
+                  new Medication { Id=m.Id, Name=m.Name, Category=m.Category, DosageForm=m.DosageForm, Unit=m.Unit, Description=m.Description, IsActive=m.IsActive };
+        showModal = true;
+    }
+    void CloseModal() { showModal = false; formError = ""; }
+
+    void Save()
+    {
+        formError = "";
+        if (string.IsNullOrWhiteSpace(editing.Name)) { formError = "Name is required."; return; }
+        editing.Category ??= ""; editing.DosageForm ??= ""; editing.Unit ??= ""; editing.Description ??= "";
+        try
+        {
+            if (editing.Id == 0) Svc.Insert(editing); else Svc.Update(editing);
+            Toast.Success("Saved."); CloseModal(); Load();
+        }
+        catch (Exception ex) { formError = ex.Message; }
+    }
+
+    void AskDelete(Medication m) { deleteTarget = m; showConfirm = true; }
+    void ConfirmDelete()
+    {
+        if (deleteTarget == null) return;
+        try { Svc.Delete(deleteTarget); Toast.Success("Deleted."); showConfirm = false; Load(); }
+        catch (Exception ex) { Toast.Error(ex.Message); showConfirm = false; }
+    }
+}

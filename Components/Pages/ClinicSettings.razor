@@ -1,0 +1,75 @@
+@page "/clinic-settings"
+@inject AppStateService AppState
+@inject IClinicSettingsService Svc
+@inject ToastService Toast
+
+@{AppState.PageTitle = "Clinic Settings";}
+
+<div class="page-header">
+    <div><div class="page-title">Clinic Settings</div></div>
+</div>
+
+<div class="card" style="max-width:720px">
+    <div class="card-header">🏥 Clinic Information</div>
+    <div class="card-body">
+        <div class="form-row">
+            <div class="form-group"><label class="form-label">Clinic Name (English)</label><input class="form-control" @bind="settings.Name" /></div>
+            <div class="form-group"><label class="form-label">Clinic Name (Khmer)</label><input class="form-control" @bind="settings.NameKhmer" /></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label class="form-label">Address (English)</label><textarea class="form-control" rows="2" @bind="settings.AddressEnglish"></textarea></div>
+            <div class="form-group"><label class="form-label">Address (Khmer)</label><textarea class="form-control" rows="2" @bind="settings.AddressKhmer"></textarea></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label class="form-label">Phone</label><input class="form-control" @bind="settings.Phone" /></div>
+            <div class="form-group"><label class="form-label">Email</label><input class="form-control" type="email" @bind="settings.Email" /></div>
+        </div>
+
+        <hr class="divider" />
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <strong>Social Links</strong>
+            <button class="btn btn-sm btn-secondary" @onclick="AddSocialLink">+ Add</button>
+        </div>
+        @foreach (var link in settings.SocialLinks)
+        {
+            <div class="form-row" style="align-items:flex-end">
+                <div class="form-group">
+                    <label class="form-label">Platform</label>
+                    <input class="form-control" @bind="link.Platform" placeholder="e.g. Facebook" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">URL / Handle</label>
+                    <input class="form-control" @bind="link.Name" placeholder="https://..." />
+                </div>
+                <div class="form-group" style="flex:0 0 auto">
+                    <button class="btn btn-sm btn-danger" @onclick="() => settings.SocialLinks.Remove(link)">✕</button>
+                </div>
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(error)) { <div class="login-error">⚠️ @error</div> }
+    </div>
+    <div class="modal-footer" style="border-top:1px solid var(--border)">
+        <button class="btn btn-primary" @onclick="Save">Save Settings</button>
+    </div>
+</div>
+
+@code {
+    ClinicSettings settings = new();
+    string error = "";
+
+    protected override void OnInitialized()
+    {
+        try { settings = Svc.Get(); }
+        catch (Exception ex) { error = ex.Message; }
+    }
+
+    void AddSocialLink() => settings.SocialLinks.Add(new SocialLink());
+
+    void Save()
+    {
+        error = "";
+        try { Svc.Save(settings); Toast.Success("Clinic settings saved."); }
+        catch (Exception ex) { error = ex.Message; }
+    }
+}

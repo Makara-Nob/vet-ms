@@ -1,0 +1,259 @@
+@page "/medical-records"
+@inject AppStateService AppState
+@inject IMedicalRecordService Svc
+@inject IPetService PetSvc
+@inject ICustomerService CustomerSvc
+@inject IUserService UserSvc
+@inject IAppointmentService ApptSvc
+@inject IMedicationService MedSvc
+@inject ToastService Toast
+
+@{AppState.PageTitle = "Medical Records";}
+
+<div class="page-header">
+    <div>
+        <div class="page-title">Medical Records</div>
+        <div class="page-subtitle">@filtered.Count record(s)</div>
+    </div>
+    <button class="btn btn-primary" @onclick="() => OpenModal(null)">+ New Record</button>
+</div>
+
+<div class="card">
+    <div class="card-body" style="padding-bottom:8px">
+        <div class="toolbar">
+            <div class="search-box">
+                <span class="search-icon">🔍</span>
+                <input placeholder="Search patient, diagnosis..." @bind="search" @bind:event="oninput" @oninput="Filter" />
+            </div>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>#</th><th>Patient</th><th>Owner</th><th>Vet</th><th>Diagnosis</th><th>Follow-up</th><th>Date</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+                @if (paged.Count == 0)
+                {
+                    <tr><td colspan="8"><div class="empty-state"><div class="empty-icon">📋</div><div class="empty-msg">No records found.</div></div></td></tr>
+                }
+                @foreach (var r in paged)
+                {
+                    <tr>
+                        <td class="text-muted text-sm">@r.Id</td>
+                        <td><strong>@r.PetName</strong></td>
+                        <td>@r.CustomerName</td>
+                        <td>@r.VetName</td>
+                        <td>@(r.Diagnosis.Length > 50 ? r.Diagnosis[..50] + "…" : r.Diagnosis)</td>
+                        <td>@(r.FollowUpDate.HasValue ? r.FollowUpDate.Value.ToString("MMM d, yyyy") : "—")</td>
+                        <td>@r.CreatedAt.ToString("MMM d, yyyy")</td>
+                        <td>
+                            <div class="td-actions">
+                                <button class="btn btn-sm btn-secondary" @onclick="() => OpenModal(r)">Edit</button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="card-body">
+        <div class="pagination">
+            <span class="pagination-info">Showing @((page-1)*pageSize+1)–@Math.Min(page*pageSize,filtered.Count) of @filtered.Count</span>
+            <button class="page-btn" disabled="@(page<=1)" @onclick="() => SetPage(page-1)">‹</button>
+            @for (int p = 1; p <= totalPages; p++) { var cp=p; <button class="page-btn @(cp==page?"active":"")" @onclick="() => SetPage(cp)">@cp</button> }
+            <button class="page-btn" disabled="@(page>=totalPages)" @onclick="() => SetPage(page+1)">›</button>
+        </div>
+    </div>
+</div>
+
+@if (showModal)
+{
+    <div class="modal-overlay" @onclick="CloseModal">
+        <div class="modal modal-lg" @onclick:stopPropagation>
+            <div class="modal-header">
+                <span>@(editing.Id == 0 ? "New Medical Record" : "Edit Medical Record")</span>
+                <button class="modal-close" @onclick="CloseModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Patient *</label>
+                        <select class="form-control" @bind="editing.PetId" @bind:after="OnPetChanged">
+                            <option value="0">-- Select Patient --</option>
+                            @foreach (var p in pets) { <option value="@p.Id">@p.Name</option> }
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Owner</label>
+                        <select class="form-control" @bind="editing.CustomerId" @bind:after="OnOwnerChanged">
+                            <option value="0">-- Select Owner --</option>
+                            @foreach (var c in customers) { <option value="@c.Id">@c.FullName</option> }
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Appointment *</label>
+                    <select class="form-control" @bind="editing.AppointmentId">
+                        <option value="0">-- Select Appointment --</option>
+                        @foreach (var a in appointments)
+                        {
+                            <option value="@a.Id">@a.AppointmentDate.ToString("MMM d, yyyy") — @a.PetName (@a.Status)</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Veterinarian</label>
+                        <select class="form-control" @bind="editing.VetId" @bind:after="OnVetChanged">
+                            <option value="">-- None --</option>
+                            @foreach (var v in vets) { <option value="@v.Id">@v.FullName</option> }
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Follow-up Date</label>
+                        <input class="form-control" type="date"
+                               value="@editing.FollowUpDate?.ToString("yyyy-MM-dd")"
+                               @onchange="e => editing.FollowUpDate = string.IsNullOrEmpty(e.Value?.ToString()) ? null : DateTime.Parse(e.Value.ToString()!)" />
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Diagnosis *</label>
+                    <textarea class="form-control" rows="3" @bind="editing.Diagnosis" placeholder="Enter diagnosis..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Treatment</label>
+                    <textarea class="form-control" rows="3" @bind="editing.Treatment" placeholder="Enter treatment plan..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Notes</label>
+                    <textarea class="form-control" rows="2" @bind="editing.Notes"></textarea>
+                </div>
+
+                <hr class="divider" />
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                    <strong>Medications</strong>
+                    <button class="btn btn-sm btn-secondary" @onclick="AddMedRow">+ Add</button>
+                </div>
+                @foreach (var m in medRows)
+                {
+                    <div class="form-row" style="align-items:flex-end">
+                        <div class="form-group">
+                            <label class="form-label">Medication</label>
+                            <select class="form-control" @bind="m.MedId">
+                                <option value="0">-- Select --</option>
+                                @foreach (var med in medications) { <option value="@med.Id">@med.Name (@med.DosageForm)</option> }
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Dosage</label>
+                            <input class="form-control" @bind="m.Dosage" placeholder="e.g. 10mg x2/day" />
+                        </div>
+                        <div class="form-group" style="flex:0 0 auto">
+                            <button class="btn btn-sm btn-danger" @onclick="() => medRows.Remove(m)">✕</button>
+                        </div>
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(formError))
+                { <div class="login-error">⚠️ @formError</div> }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                <button class="btn btn-primary" @onclick="Save">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    List<MedicalRecord> all = [], filtered = [], paged = [];
+    List<Pet> pets = [];
+    List<Customer> customers = [];
+    List<User> vets = [];
+    List<Medication> medications = [];
+    List<Appointment> appointments = [];
+    List<MedRow> medRows = [];
+    string search = "";
+    int page = 1, pageSize = 10, totalPages = 1;
+    bool showModal;
+    string formError = "";
+    MedicalRecord editing = new();
+
+    class MedRow { public int MedId; public string Dosage = ""; public string Notes = ""; }
+
+    protected override void OnInitialized()
+    {
+        pets = PetSvc.GetAll();
+        customers = CustomerSvc.GetAll();
+        vets = UserSvc.GetAll().Where(u => u.IsActive).ToList();
+        medications = MedSvc.GetAll();
+        appointments = ApptSvc.GetAll();
+        Load();
+    }
+
+    void Load() { all = Svc.GetAll(); Filter(); }
+
+    void Filter()
+    {
+        filtered = all.Where(r =>
+            string.IsNullOrEmpty(search) ||
+            r.PetName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+            r.Diagnosis.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+            r.CustomerName.Contains(search, StringComparison.OrdinalIgnoreCase)
+        ).ToList();
+        totalPages = Math.Max(1, (int)Math.Ceiling(filtered.Count / (double)pageSize));
+        page = 1; Paginate();
+    }
+
+    void Paginate() => paged = filtered.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+    void SetPage(int p) { page = p; Paginate(); }
+
+    void OpenModal(MedicalRecord? r)
+    {
+        formError = "";
+        if (r == null)
+        {
+            editing = new MedicalRecord { AppointmentId = 0 };
+            medRows = [];
+        }
+        else
+        {
+            editing = new MedicalRecord
+            {
+                Id=r.Id, AppointmentId=r.AppointmentId, PetId=r.PetId, PetName=r.PetName,
+                CustomerId=r.CustomerId, CustomerName=r.CustomerName, VetId=r.VetId, VetName=r.VetName,
+                Diagnosis=r.Diagnosis, Treatment=r.Treatment, Notes=r.Notes, FollowUpDate=r.FollowUpDate
+            };
+            var existing = Svc.GetMedications(r.Id);
+            medRows = existing.Select(m => new MedRow { MedId=m.MedicationId, Dosage=m.Dosage, Notes=m.Notes }).ToList();
+        }
+        showModal = true;
+    }
+    void CloseModal() { showModal = false; formError = ""; }
+
+    void AddMedRow() => medRows.Add(new MedRow());
+
+    void OnPetChanged() { var p = pets.FirstOrDefault(x => x.Id == editing.PetId); editing.PetName = p?.Name ?? ""; }
+    void OnOwnerChanged() { var c = customers.FirstOrDefault(x => x.Id == editing.CustomerId); editing.CustomerName = c?.FullName ?? ""; }
+    void OnVetChanged() { var v = vets.FirstOrDefault(x => x.Id == editing.VetId); editing.VetName = v?.FullName ?? ""; }
+
+    void Save()
+    {
+        formError = "";
+        if (editing.AppointmentId == 0) { formError = "Appointment is required."; return; }
+        if (editing.PetId == 0) { formError = "Patient is required."; return; }
+        if (string.IsNullOrWhiteSpace(editing.Diagnosis)) { formError = "Diagnosis is required."; return; }
+        editing.Treatment ??= ""; editing.Notes ??= "";
+        try
+        {
+            if (editing.Id == 0) Svc.Insert(editing); else Svc.Update(editing);
+            var items = medRows.Where(m => m.MedId > 0)
+                               .Select(m => (m.MedId, m.Dosage, m.Notes)).ToList();
+            Svc.SaveMedications(editing.Id, items);
+            Toast.Success(editing.Id == 0 ? "Record created." : "Record updated.");
+            CloseModal(); Load();
+        }
+        catch (Exception ex) { formError = ex.Message; }
+    }
+}

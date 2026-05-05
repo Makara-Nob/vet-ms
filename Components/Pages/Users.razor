@@ -1,0 +1,127 @@
+@page "/users"
+@inject AppStateService AppState
+@inject IUserService Svc
+@inject ToastService Toast
+
+@{AppState.PageTitle = "User Management";}
+
+<div class="page-header">
+    <div><div class="page-title">User Management</div></div>
+    <button class="btn btn-primary" @onclick="() => OpenModal(null)">+ New User</button>
+</div>
+
+<div class="card">
+    <div class="card-body" style="padding-bottom:8px">
+        <div class="toolbar">
+            <div class="search-box"><span class="search-icon">🔍</span><input placeholder="Search..." @bind="search" @bind:event="oninput" @oninput="Filter" /></div>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>#</th><th>Username</th><th>Full Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+                @if (filtered.Count == 0)
+                { <tr><td colspan="7"><div class="empty-state"><div class="empty-icon">👥</div><div class="empty-msg">No users found.</div></div></td></tr> }
+                @foreach (var u in filtered)
+                {
+                    <tr>
+                        <td class="text-muted text-sm">@u.Id</td>
+                        <td><strong>@u.Username</strong></td>
+                        <td>@u.FullName</td>
+                        <td>@u.Email</td>
+                        <td><span class="badge @(u.Role=="Administrator"?"badge-primary":"badge-info")">@u.Role</span></td>
+                        <td><span class="badge @(u.IsActive?"badge-success":"badge-gray")">@(u.IsActive?"Active":"Inactive")</span></td>
+                        <td><div class="td-actions">
+                            <button class="btn btn-sm btn-secondary" @onclick="() => OpenModal(u)">Edit</button>
+                            @if (u.Id != AppState.CurrentUser?.Id)
+                            { <button class="btn btn-sm btn-danger" @onclick="() => AskDelete(u)">Delete</button> }
+                        </div></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (showModal)
+{
+    <div class="modal-overlay" @onclick="CloseModal">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header"><span>@(editing.Id==0?"New User":"Edit User")</span><button class="modal-close" @onclick="CloseModal">✕</button></div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Username *</label><input class="form-control" @bind="editing.Username" /></div>
+                    <div class="form-group"><label class="form-label">Full Name *</label><input class="form-control" @bind="editing.FullName" /></div>
+                </div>
+                <div class="form-group"><label class="form-label">Email</label><input class="form-control" type="email" @bind="editing.Email" /></div>
+                <div class="form-group">
+                    <label class="form-label">Password @(editing.Id == 0 ? "*" : "(leave blank to keep)")</label>
+                    <input class="form-control" type="password" @bind="editing.PasswordHash" placeholder="@(editing.Id==0?"Set password":"New password (optional)")" />
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Role</label>
+                        <select class="form-control" @bind="editing.Role">
+                            <option>Administrator</option><option>Staff</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="display:flex;align-items:flex-end">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding-bottom:8px"><input type="checkbox" @bind="editing.IsActive" /> Active</label>
+                    </div>
+                </div>
+                @if (!string.IsNullOrEmpty(formError)) { <div class="login-error">⚠️ @formError</div> }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                <button class="btn btn-primary" @onclick="Save">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+<ConfirmModal Visible="showConfirm" Title="Delete User" Message="@($"Delete user {deleteTarget?.Username}? This cannot be undone.")"
+    OnConfirm="ConfirmDelete" OnCancel="() => showConfirm = false" />
+
+@code {
+    List<User> all = [], filtered = [];
+    string search = "", formError = "";
+    bool showModal, showConfirm;
+    User editing = new();
+    User? deleteTarget;
+
+    protected override void OnInitialized() => Load();
+    void Load() { all = Svc.GetAll(); Filter(); }
+    void Filter() => filtered = all.Where(u => string.IsNullOrEmpty(search) || u.Username.Contains(search, StringComparison.OrdinalIgnoreCase) || u.FullName.Contains(search, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    void OpenModal(User? u)
+    {
+        formError = "";
+        editing = u == null ? new User { IsActive = true, Role = "Staff" } :
+                  new User { Id=u.Id, Username=u.Username, FullName=u.FullName, Email=u.Email, Role=u.Role, IsActive=u.IsActive };
+        showModal = true;
+    }
+    void CloseModal() { showModal = false; formError = ""; }
+
+    void Save()
+    {
+        formError = "";
+        if (string.IsNullOrWhiteSpace(editing.Username)) { formError = "Username is required."; return; }
+        if (string.IsNullOrWhiteSpace(editing.FullName)) { formError = "Full name is required."; return; }
+        if (editing.Id == 0 && string.IsNullOrWhiteSpace(editing.PasswordHash)) { formError = "Password is required for new users."; return; }
+        editing.Email ??= "";
+        try
+        {
+            if (editing.Id == 0) Svc.Insert(editing); else Svc.Update(editing);
+            Toast.Success("Saved."); CloseModal(); Load();
+        }
+        catch (Exception ex) { formError = ex.Message; }
+    }
+
+    void AskDelete(User u) { deleteTarget = u; showConfirm = true; }
+    void ConfirmDelete()
+    {
+        if (deleteTarget == null) return;
+        try { Svc.Delete(deleteTarget); Toast.Success("User deleted."); showConfirm = false; Load(); }
+        catch (Exception ex) { Toast.Error(ex.Message); showConfirm = false; }
+    }
+}

@@ -1,0 +1,180 @@
+@page "/customers"
+@inject AppStateService AppState
+@inject ICustomerService Svc
+@inject ToastService Toast
+
+@{AppState.PageTitle = "Customers";}
+
+<div class="page-header">
+    <div>
+        <div class="page-title">Customers</div>
+        <div class="page-subtitle">@filtered.Count record(s)</div>
+    </div>
+    <button class="btn btn-primary" @onclick="() => OpenModal(null)">+ New Customer</button>
+</div>
+
+<div class="card">
+    <div class="card-body" style="padding-bottom:8px">
+        <div class="toolbar">
+            <div class="search-box">
+                <span class="search-icon">🔍</span>
+                <input placeholder="Search name, phone, email..." @bind="search" @bind:event="oninput" @oninput="Filter" />
+            </div>
+            <select class="form-control" style="width:140px" @bind="filterActive" @bind:after="Filter">
+                <option value="">All Status</option>
+                <option value="true">Active</option>
+                <option value="false">Inactive</option>
+            </select>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>#</th><th>Name</th><th>Phone</th><th>Email</th><th>Address</th><th>Status</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+                @if (paged.Count == 0)
+                {
+                    <tr><td colspan="7"><div class="empty-state"><div class="empty-icon">👤</div><div class="empty-msg">No customers found.</div></div></td></tr>
+                }
+                @foreach (var c in paged)
+                {
+                    <tr>
+                        <td class="text-muted text-sm">@c.Id</td>
+                        <td><strong>@c.FullName</strong></td>
+                        <td>@c.Phone</td>
+                        <td>@c.Email</td>
+                        <td>@c.Address</td>
+                        <td><span class="badge @(c.IsActive?"badge-success":"badge-gray")">@(c.IsActive?"Active":"Inactive")</span></td>
+                        <td>
+                            <div class="td-actions">
+                                <button class="btn btn-sm btn-secondary" @onclick="() => OpenModal(c)">Edit</button>
+                                <button class="btn btn-sm btn-danger" @onclick="() => AskDelete(c)">Delete</button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="card-body">
+        <div class="pagination">
+            <span class="pagination-info">Showing @((page-1)*pageSize+1)–@Math.Min(page*pageSize,filtered.Count) of @filtered.Count</span>
+            <button class="page-btn" disabled="@(page<=1)" @onclick="() => SetPage(page-1)">‹</button>
+            @for (int p = 1; p <= totalPages; p++) { var cp=p; <button class="page-btn @(cp==page?"active":"")" @onclick="() => SetPage(cp)">@cp</button> }
+            <button class="page-btn" disabled="@(page>=totalPages)" @onclick="() => SetPage(page+1)">›</button>
+        </div>
+    </div>
+</div>
+
+@if (showModal)
+{
+    <div class="modal-overlay" @onclick="CloseModal">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header">
+                <span>@(editing.Id == 0 ? "New Customer" : "Edit Customer")</span>
+                <button class="modal-close" @onclick="CloseModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Full Name *</label>
+                    <input class="form-control" @bind="editing.FullName" placeholder="Customer full name" />
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Phone</label>
+                        <input class="form-control" @bind="editing.Phone" placeholder="Phone number" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input class="form-control" type="email" @bind="editing.Email" placeholder="Email address" />
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Address</label>
+                    <input class="form-control" @bind="editing.Address" placeholder="Address" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Notes</label>
+                    <textarea class="form-control" rows="2" @bind="editing.Notes"></textarea>
+                </div>
+                <div class="form-group">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                        <input type="checkbox" @bind="editing.IsActive" /> Active
+                    </label>
+                </div>
+                @if (!string.IsNullOrEmpty(formError))
+                { <div class="login-error">⚠️ @formError</div> }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                <button class="btn btn-primary" @onclick="Save">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+<ConfirmModal Visible="showConfirm" Title="Delete Customer"
+    Message="@($"Delete {deleteTarget?.FullName}? This cannot be undone.")"
+    OnConfirm="ConfirmDelete" OnCancel="() => showConfirm = false" />
+
+@code {
+    List<Customer> all = [], filtered = [], paged = [];
+    string search = "", filterActive = "";
+    int page = 1, pageSize = 20, totalPages = 1;
+    bool showModal, showConfirm;
+    string formError = "";
+    Customer editing = new();
+    Customer? deleteTarget;
+
+    protected override void OnInitialized() => Load();
+
+    void Load() { all = Svc.GetAll(); Filter(); }
+
+    void Filter()
+    {
+        filtered = all.Where(c =>
+            (string.IsNullOrEmpty(search) ||
+             c.FullName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+             c.Phone.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+             c.Email.Contains(search, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrEmpty(filterActive) || c.IsActive.ToString().ToLower() == filterActive)
+        ).ToList();
+        totalPages = Math.Max(1, (int)Math.Ceiling(filtered.Count / (double)pageSize));
+        page = 1; Paginate();
+    }
+
+    void Paginate() => paged = filtered.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+    void SetPage(int p) { page = p; Paginate(); }
+
+    void OpenModal(Customer? c)
+    {
+        formError = "";
+        editing = c == null ? new Customer { IsActive = true }
+                            : new Customer { Id=c.Id, FullName=c.FullName, Phone=c.Phone, Email=c.Email, Address=c.Address, Notes=c.Notes, IsActive=c.IsActive };
+        showModal = true;
+    }
+    void CloseModal() { showModal = false; formError = ""; }
+
+    void Save()
+    {
+        formError = "";
+        if (string.IsNullOrWhiteSpace(editing.FullName)) { formError = "Name is required."; return; }
+        editing.Phone ??= ""; editing.Email ??= ""; editing.Address ??= ""; editing.Notes ??= "";
+        try
+        {
+            if (editing.Id == 0) Svc.Insert(editing); else Svc.Update(editing);
+            Toast.Success(editing.Id == 0 ? "Customer created." : "Customer updated.");
+            CloseModal(); Load();
+        }
+        catch (Exception ex) { formError = ex.Message; }
+    }
+
+    void AskDelete(Customer c) { deleteTarget = c; showConfirm = true; }
+    void ConfirmDelete()
+    {
+        if (deleteTarget == null) return;
+        try { Svc.Delete(deleteTarget); Toast.Success("Customer deleted."); showConfirm = false; Load(); }
+        catch (Exception ex) { Toast.Error(ex.Message); showConfirm = false; }
+    }
+}

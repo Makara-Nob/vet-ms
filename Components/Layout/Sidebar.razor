@@ -1,0 +1,79 @@
+@inject AppStateService AppState
+@inject NavigationManager Nav
+
+<nav class="sidebar">
+    <div class="sidebar-logo">
+        <div class="sidebar-logo-icon">🐾</div>
+        <div>
+            <div class="sidebar-logo-text">VetMS</div>
+            <div class="sidebar-logo-sub">Veterinary System</div>
+        </div>
+    </div>
+
+    <div class="sidebar-profile" @onclick="GoToProfile">
+        <div class="avatar">
+            @if (AppState.CurrentUser?.ProfilePicture?.Length > 0)
+            {
+                <img src="data:image/png;base64,@Convert.ToBase64String(AppState.CurrentUser.ProfilePicture)" />
+            }
+            else
+            {
+                @GetInitial()
+            }
+        </div>
+        <div>
+            <div class="profile-name">@AppState.CurrentUser?.FullName</div>
+            <div class="profile-role">@AppState.CurrentUser?.Role</div>
+        </div>
+    </div>
+
+    <div class="sidebar-section">
+        <div class="sidebar-section-label">Operations</div>
+        <NavButton Href="/dashboard" Icon="📊" Label="Dashboard" />
+        <NavButton Href="/appointments" Icon="📅" Label="Appointments" />
+        <NavButton Href="/pets" Icon="🐶" Label="Patients" />
+        <NavButton Href="/customers" Icon="👤" Label="Customers" />
+        <NavButton Href="/medical-records" Icon="📋" Label="Medical Records" />
+        <NavButton Href="/cbc" Icon="🧪" Label="CBC Records" />
+    </div>
+
+    <div class="sidebar-section">
+        <div class="sidebar-section-label">Master Data</div>
+        <NavButton Href="/species" Icon="🦎" Label="Species" />
+        <NavButton Href="/breeds" Icon="🐕" Label="Breeds" />
+        <NavButton Href="/service-types" Icon="💉" Label="Services" />
+        <NavButton Href="/medications" Icon="💊" Label="Medications" />
+        <NavButton Href="/suppliers" Icon="🏭" Label="Suppliers" />
+    </div>
+
+    @if (AppState.CurrentUser?.Role == "Administrator")
+    {
+        <div class="sidebar-section">
+            <div class="sidebar-section-label">Admin</div>
+            <NavButton Href="/users" Icon="👥" Label="Users" />
+            <NavButton Href="/clinic-settings" Icon="⚙️" Label="Clinic Settings" />
+        </div>
+    }
+
+    <div class="sidebar-spacer"></div>
+
+    <div class="sidebar-footer">
+        <button class="logout-btn" @onclick="Logout">
+            <span>🚪</span> Logout
+        </button>
+    </div>
+</nav>
+
+@code {
+    string GetInitial() =>
+        string.IsNullOrEmpty(AppState.CurrentUser?.FullName) ? "?" :
+        AppState.CurrentUser.FullName[0].ToString().ToUpper();
+
+    void GoToProfile() => Nav.NavigateTo("/profile");
+
+    void Logout()
+    {
+        AppState.Logout();
+        Nav.NavigateTo("/login", forceLoad: false);
+    }
+}

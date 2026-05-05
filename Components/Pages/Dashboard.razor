@@ -1,0 +1,106 @@
+@page "/dashboard"
+@inject AppStateService AppState
+@inject IAppointmentService AppointmentSvc
+@inject IPetService PetSvc
+@inject ICustomerService CustomerSvc
+@inject IMedicalRecordService RecordSvc
+
+@{AppState.PageTitle = "Dashboard";}
+
+<div class="page-header">
+    <div>
+        <div class="page-title">Dashboard</div>
+        <div class="page-subtitle">Welcome back, @AppState.CurrentUser?.FullName</div>
+    </div>
+</div>
+
+<div class="stat-grid">
+    <div class="stat-card primary">
+        <div class="stat-icon">📅</div>
+        <div class="stat-label">Today's Appointments</div>
+        <div class="stat-value">@todayAppts</div>
+    </div>
+    <div class="stat-card success">
+        <div class="stat-icon">🐶</div>
+        <div class="stat-label">Total Patients</div>
+        <div class="stat-value">@totalPets</div>
+    </div>
+    <div class="stat-card info">
+        <div class="stat-icon">👤</div>
+        <div class="stat-label">Total Customers</div>
+        <div class="stat-value">@totalCustomers</div>
+    </div>
+    <div class="stat-card warning">
+        <div class="stat-icon">📋</div>
+        <div class="stat-label">Medical Records</div>
+        <div class="stat-value">@totalRecords</div>
+    </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+    <div class="card">
+        <div class="card-header">📅 Recent Appointments</div>
+        <div class="card-body" style="padding:0">
+            @if (recentAppts.Count == 0)
+            {
+                <div class="empty-state"><div class="empty-msg">No appointments found.</div></div>
+            }
+            else
+            {
+                <table>
+                    <thead><tr><th>Patient</th><th>Date</th><th>Status</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in recentAppts)
+                        {
+                            <tr>
+                                <td>@a.PetName<br/><span class="text-muted text-sm">@a.CustomerName</span></td>
+                                <td>@a.AppointmentDate.ToString("MMM d, HH:mm")</td>
+                                <td><span class="badge @StatusBadge(a.Status)">@a.Status</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">📊 Appointment Status</div>
+        <div class="card-body">
+            @foreach (var g in statusGroups)
+            {
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+                    <span class="badge @StatusBadge(g.Key)">@g.Key</span>
+                    <span style="font-weight:700">@g.Value</span>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    int todayAppts, totalPets, totalCustomers, totalRecords;
+    List<Appointment> recentAppts = [];
+    Dictionary<string, int> statusGroups = [];
+
+    protected override void OnInitialized()
+    {
+        var today = DateTime.Today;
+        var appts = AppointmentSvc.GetAll();
+        todayAppts = appts.Count(a => a.AppointmentDate.Date == today);
+        totalPets = PetSvc.GetAll().Count;
+        totalCustomers = CustomerSvc.GetAll().Count;
+        totalRecords = RecordSvc.GetAll().Count;
+        recentAppts = appts.Take(8).ToList();
+        statusGroups = appts.GroupBy(a => a.Status).ToDictionary(g => g.Key, g => g.Count());
+    }
+
+    string StatusBadge(string status) => status switch
+    {
+        "Scheduled" => "badge-info",
+        "In Progress" => "badge-warning",
+        "Completed" => "badge-success",
+        "Cancelled" => "badge-danger",
+        _ => "badge-gray"
+    };
+}

@@ -1,0 +1,114 @@
+@page "/suppliers"
+@inject AppStateService AppState
+@inject ISupplierService Svc
+@inject ToastService Toast
+
+@{AppState.PageTitle = "Suppliers";}
+
+<div class="page-header">
+    <div><div class="page-title">Suppliers</div></div>
+    <button class="btn btn-primary" @onclick="() => OpenModal(null)">+ New Supplier</button>
+</div>
+
+<div class="card">
+    <div class="card-body" style="padding-bottom:8px">
+        <div class="toolbar">
+            <div class="search-box"><span class="search-icon">🔍</span><input placeholder="Search..." @bind="search" @bind:event="oninput" @oninput="Filter" /></div>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>#</th><th>Company</th><th>Contact</th><th>Phone</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+                @if (filtered.Count == 0)
+                { <tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🏭</div><div class="empty-msg">No suppliers found.</div></div></td></tr> }
+                @foreach (var s in filtered)
+                {
+                    <tr>
+                        <td class="text-muted text-sm">@s.Id</td>
+                        <td><strong>@s.CompanyName</strong></td>
+                        <td>@s.ContactPerson</td>
+                        <td>@s.Phone</td>
+                        <td>@s.Email</td>
+                        <td><span class="badge @(s.IsActive?"badge-success":"badge-gray")">@(s.IsActive?"Active":"Inactive")</span></td>
+                        <td><div class="td-actions">
+                            <button class="btn btn-sm btn-secondary" @onclick="() => OpenModal(s)">Edit</button>
+                            <button class="btn btn-sm btn-danger" @onclick="() => AskDelete(s)">Delete</button>
+                        </div></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (showModal)
+{
+    <div class="modal-overlay" @onclick="CloseModal">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header"><span>@(editing.Id==0?"New Supplier":"Edit Supplier")</span><button class="modal-close" @onclick="CloseModal">✕</button></div>
+            <div class="modal-body">
+                <div class="form-group"><label class="form-label">Company Name *</label><input class="form-control" @bind="editing.CompanyName" /></div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Contact Person</label><input class="form-control" @bind="editing.ContactPerson" /></div>
+                    <div class="form-group"><label class="form-label">Phone</label><input class="form-control" @bind="editing.Phone" /></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Email</label><input class="form-control" type="email" @bind="editing.Email" /></div>
+                    <div class="form-group"><label class="form-label">Address</label><input class="form-control" @bind="editing.Address" /></div>
+                </div>
+                <div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" @bind="editing.IsActive" /> Active</label></div>
+                @if (!string.IsNullOrEmpty(formError)) { <div class="login-error">⚠️ @formError</div> }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                <button class="btn btn-primary" @onclick="Save">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+<ConfirmModal Visible="showConfirm" Title="Delete Supplier" Message="@($"Delete {deleteTarget?.CompanyName}?")"
+    OnConfirm="ConfirmDelete" OnCancel="() => showConfirm = false" />
+
+@code {
+    List<Supplier> all = [], filtered = [];
+    string search = "", formError = "";
+    bool showModal, showConfirm;
+    Supplier editing = new();
+    Supplier? deleteTarget;
+
+    protected override void OnInitialized() => Load();
+    void Load() { all = Svc.GetAll(); Filter(); }
+    void Filter() => filtered = all.Where(s => string.IsNullOrEmpty(search) || s.CompanyName.Contains(search, StringComparison.OrdinalIgnoreCase) || s.ContactPerson.Contains(search, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    void OpenModal(Supplier? s)
+    {
+        formError = "";
+        editing = s == null ? new Supplier { IsActive = true } :
+                  new Supplier { Id=s.Id, CompanyName=s.CompanyName, ContactPerson=s.ContactPerson, Phone=s.Phone, Email=s.Email, Address=s.Address, IsActive=s.IsActive };
+        showModal = true;
+    }
+    void CloseModal() { showModal = false; formError = ""; }
+
+    void Save()
+    {
+        formError = "";
+        if (string.IsNullOrWhiteSpace(editing.CompanyName)) { formError = "Company name is required."; return; }
+        editing.ContactPerson ??= ""; editing.Phone ??= ""; editing.Email ??= ""; editing.Address ??= "";
+        try
+        {
+            if (editing.Id == 0) Svc.Insert(editing); else Svc.Update(editing);
+            Toast.Success("Saved."); CloseModal(); Load();
+        }
+        catch (Exception ex) { formError = ex.Message; }
+    }
+
+    void AskDelete(Supplier s) { deleteTarget = s; showConfirm = true; }
+    void ConfirmDelete()
+    {
+        if (deleteTarget == null) return;
+        try { Svc.Delete(deleteTarget); Toast.Success("Deleted."); showConfirm = false; Load(); }
+        catch (Exception ex) { Toast.Error(ex.Message); showConfirm = false; }
+    }
+}

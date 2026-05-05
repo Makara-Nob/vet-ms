@@ -1,0 +1,277 @@
+@page "/pets"
+@inject AppStateService AppState
+@inject IPetService Svc
+@inject ICustomerService CustomerSvc
+@inject ISpeciesService SpeciesSvc
+@inject IBreedService BreedSvc
+@inject ToastService Toast
+
+@{AppState.PageTitle = "Patients";}
+
+<div class="page-header">
+    <div>
+        <div class="page-title">Patients</div>
+        <div class="page-subtitle">@filtered.Count record(s)</div>
+    </div>
+    <button class="btn btn-primary" @onclick="() => OpenModal(null)">+ New Patient</button>
+</div>
+
+<div class="card">
+    <div class="card-body" style="padding-bottom:8px">
+        <div class="toolbar">
+            <div class="search-box">
+                <span class="search-icon">🔍</span>
+                <input placeholder="Search name, owner, microchip..." @bind="search" @bind:event="oninput" @oninput="Filter" />
+            </div>
+            <select class="form-control" style="width:150px" @bind="filterSpecies" @bind:after="Filter">
+                <option value="0">All Species</option>
+                @foreach (var s in species) { <option value="@s.Id">@s.Name</option> }
+            </select>
+            <select class="form-control" style="width:130px" @bind="filterActive" @bind:after="Filter">
+                <option value="">All Status</option>
+                <option value="true">Active</option>
+                <option value="false">Inactive</option>
+            </select>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>#</th><th>Name</th><th>Species / Breed</th><th>Owner</th><th>Gender</th><th>Weight</th><th>Status</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+                @if (paged.Count == 0)
+                {
+                    <tr><td colspan="8"><div class="empty-state"><div class="empty-icon">🐶</div><div class="empty-msg">No patients found.</div></div></td></tr>
+                }
+                @foreach (var p in paged)
+                {
+                    <tr>
+                        <td class="text-muted text-sm">@p.Id</td>
+                        <td>
+                            <strong>@p.Name</strong>
+                            @if (!string.IsNullOrEmpty(p.MicrochipNo))
+                            { <div class="text-sm text-muted">🔖 @p.MicrochipNo</div> }
+                        </td>
+                        <td>@p.SpeciesName @(!string.IsNullOrEmpty(p.BreedName) ? $"/ {p.BreedName}" : "")</td>
+                        <td>@p.CustomerName</td>
+                        <td>@p.Gender</td>
+                        <td>@p.Weight kg</td>
+                        <td><span class="badge @(p.IsActive?"badge-success":"badge-gray")">@(p.IsActive?"Active":"Inactive")</span></td>
+                        <td>
+                            <div class="td-actions">
+                                <button class="btn btn-sm btn-secondary" @onclick="() => OpenModal(p)">Edit</button>
+                                <button class="btn btn-sm btn-danger" @onclick="() => AskDelete(p)">Delete</button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="card-body">
+        <div class="pagination">
+            <span class="pagination-info">Showing @((page-1)*pageSize+1)–@Math.Min(page*pageSize,filtered.Count) of @filtered.Count</span>
+            <button class="page-btn" disabled="@(page<=1)" @onclick="() => SetPage(page-1)">‹</button>
+            @for (int p = 1; p <= totalPages; p++) { var cp=p; <button class="page-btn @(cp==page?"active":"")" @onclick="() => SetPage(cp)">@cp</button> }
+            <button class="page-btn" disabled="@(page>=totalPages)" @onclick="() => SetPage(page+1)">›</button>
+        </div>
+    </div>
+</div>
+
+@if (showModal)
+{
+    <div class="modal-overlay" @onclick="CloseModal">
+        <div class="modal modal-lg" @onclick:stopPropagation>
+            <div class="modal-header">
+                <span>@(editing.Id == 0 ? "New Patient" : "Edit Patient")</span>
+                <button class="modal-close" @onclick="CloseModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Name *</label>
+                        <input class="form-control" @bind="editing.Name" placeholder="Pet name" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Owner *</label>
+                        <select class="form-control" @bind="editing.CustomerId" @bind:after="OnOwnerChanged">
+                            <option value="0">-- Select Owner --</option>
+                            @foreach (var c in customers) { <option value="@c.Id">@c.FullName</option> }
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Species *</label>
+                        <select class="form-control" @bind="editing.SpeciesId" @bind:after="OnSpeciesChanged">
+                            <option value="0">-- Select Species --</option>
+                            @foreach (var s in species) { <option value="@s.Id">@s.Name</option> }
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Breed</label>
+                        <select class="form-control" @bind="editing.BreedId" @bind:after="OnBreedChanged">
+                            <option value="">-- None --</option>
+                            @foreach (var b in filteredBreeds) { <option value="@b.Id">@b.Name</option> }
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Gender</label>
+                        <select class="form-control" @bind="editing.Gender">
+                            <option>Male</option><option>Female</option><option>Unknown</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Date of Birth</label>
+                        <input class="form-control" type="date"
+                               value="@editing.DateOfBirth?.ToString("yyyy-MM-dd")"
+                               @onchange="e => editing.DateOfBirth = string.IsNullOrEmpty(e.Value?.ToString()) ? null : DateTime.Parse(e.Value.ToString()!)" />
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Weight (kg)</label>
+                        <input class="form-control" type="number" step="0.1" @bind="editing.Weight" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Color</label>
+                        <input class="form-control" @bind="editing.Color" placeholder="e.g. Brown, Black & White" />
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Microchip No.</label>
+                        <input class="form-control" @bind="editing.MicrochipNo" placeholder="Microchip number" />
+                    </div>
+                    <div class="form-group" style="display:flex;align-items:flex-end">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding-bottom:8px">
+                            <input type="checkbox" @bind="editing.IsActive" /> Active
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Notes</label>
+                    <textarea class="form-control" rows="2" @bind="editing.Notes"></textarea>
+                </div>
+                @if (!string.IsNullOrEmpty(formError))
+                { <div class="login-error">⚠️ @formError</div> }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                <button class="btn btn-primary" @onclick="Save">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+<ConfirmModal Visible="showConfirm" Title="Delete Patient"
+    Message="@($"Delete {deleteTarget?.Name}? This cannot be undone.")"
+    OnConfirm="ConfirmDelete" OnCancel="() => showConfirm = false" />
+
+@code {
+    List<Pet> all = [], filtered = [], paged = [];
+    List<Customer> customers = [];
+    List<AnimalSpecies> species = [];
+    List<Breed> allBreeds = [], filteredBreeds = [];
+    string search = "", filterActive = "";
+    int filterSpecies = 0, page = 1, pageSize = 20, totalPages = 1;
+    bool showModal, showConfirm;
+    string formError = "";
+    Pet editing = new();
+    Pet? deleteTarget;
+
+    protected override void OnInitialized()
+    {
+        customers = CustomerSvc.GetAll();
+        species = SpeciesSvc.GetAll();
+        allBreeds = BreedSvc.GetAll();
+        Load();
+    }
+
+    void Load() { all = Svc.GetAll(); Filter(); }
+
+    void Filter()
+    {
+        filtered = all.Where(p =>
+            (string.IsNullOrEmpty(search) ||
+             p.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+             p.CustomerName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+             p.MicrochipNo.Contains(search, StringComparison.OrdinalIgnoreCase)) &&
+            (filterSpecies == 0 || p.SpeciesId == filterSpecies) &&
+            (string.IsNullOrEmpty(filterActive) || p.IsActive.ToString().ToLower() == filterActive)
+        ).ToList();
+        totalPages = Math.Max(1, (int)Math.Ceiling(filtered.Count / (double)pageSize));
+        page = 1; Paginate();
+    }
+
+    void Paginate() => paged = filtered.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+    void SetPage(int p) { page = p; Paginate(); }
+
+    void OpenModal(Pet? p)
+    {
+        formError = "";
+        if (p == null)
+        {
+            editing = new Pet { IsActive = true, Gender = "Male", Weight = 0 };
+            filteredBreeds = [];
+        }
+        else
+        {
+            editing = new Pet
+            {
+                Id=p.Id, Name=p.Name, CustomerId=p.CustomerId, CustomerName=p.CustomerName,
+                SpeciesId=p.SpeciesId, SpeciesName=p.SpeciesName, BreedId=p.BreedId, BreedName=p.BreedName,
+                Gender=p.Gender, DateOfBirth=p.DateOfBirth, Weight=p.Weight, Color=p.Color,
+                MicrochipNo=p.MicrochipNo, Notes=p.Notes, IsActive=p.IsActive
+            };
+            filteredBreeds = allBreeds.Where(b => b.SpeciesId == editing.SpeciesId).ToList();
+        }
+        showModal = true;
+    }
+    void CloseModal() { showModal = false; formError = ""; }
+
+    void OnOwnerChanged()
+    {
+        var c = customers.FirstOrDefault(x => x.Id == editing.CustomerId);
+        editing.CustomerName = c?.FullName ?? "";
+    }
+    void OnSpeciesChanged()
+    {
+        var s = species.FirstOrDefault(x => x.Id == editing.SpeciesId);
+        editing.SpeciesName = s?.Name ?? "";
+        filteredBreeds = allBreeds.Where(b => b.SpeciesId == editing.SpeciesId).ToList();
+        editing.BreedId = null; editing.BreedName = "";
+    }
+    void OnBreedChanged()
+    {
+        var b = allBreeds.FirstOrDefault(x => x.Id == editing.BreedId);
+        editing.BreedName = b?.Name ?? "";
+    }
+
+    void Save()
+    {
+        formError = "";
+        if (string.IsNullOrWhiteSpace(editing.Name)) { formError = "Name is required."; return; }
+        if (editing.CustomerId == 0) { formError = "Owner is required."; return; }
+        if (editing.SpeciesId == 0) { formError = "Species is required."; return; }
+        editing.Color ??= ""; editing.MicrochipNo ??= ""; editing.Notes ??= ""; editing.BreedName ??= "";
+        try
+        {
+            if (editing.Id == 0) Svc.Insert(editing); else Svc.Update(editing);
+            Toast.Success(editing.Id == 0 ? "Patient created." : "Patient updated.");
+            CloseModal(); Load();
+        }
+        catch (Exception ex) { formError = ex.Message; }
+    }
+
+    void AskDelete(Pet p) { deleteTarget = p; showConfirm = true; }
+    void ConfirmDelete()
+    {
+        if (deleteTarget == null) return;
+        try { Svc.Delete(deleteTarget); Toast.Success("Patient deleted."); showConfirm = false; Load(); }
+        catch (Exception ex) { Toast.Error(ex.Message); showConfirm = false; }
+    }
+}

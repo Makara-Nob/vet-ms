@@ -1,0 +1,308 @@
+@page "/appointments"
+@inject AppStateService AppState
+@inject IAppointmentService Svc
+@inject IPetService PetSvc
+@inject ICustomerService CustomerSvc
+@inject IUserService UserSvc
+@inject IServiceTypeService ServiceSvc
+@inject ToastService Toast
+
+@{AppState.PageTitle = "Appointments";}
+
+<div class="page-header">
+    <div>
+        <div class="page-title">Appointments</div>
+        <div class="page-subtitle">@filtered.Count record(s)</div>
+    </div>
+    <button class="btn btn-primary" @onclick="() => OpenModal(null)">+ New Appointment</button>
+</div>
+
+<div class="card">
+    <div class="card-body" style="padding-bottom:8px">
+        <div class="toolbar">
+            <div class="search-box">
+                <span class="search-icon">🔍</span>
+                <input placeholder="Search patient, customer..." @bind="search" @bind:event="oninput" @oninput="Filter" />
+            </div>
+            <select class="form-control" style="width:160px" @bind="filterStatus" @bind:after="Filter">
+                <option value="">All Statuses</option>
+                <option>Scheduled</option>
+                <option>In Progress</option>
+                <option>Completed</option>
+                <option>Cancelled</option>
+            </select>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Patient</th>
+                    <th>Customer</th>
+                    <th>Service</th>
+                    <th>Date & Time</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (paged.Count == 0)
+                {
+                    <tr><td colspan="7"><div class="empty-state"><div class="empty-icon">📅</div><div class="empty-msg">No appointments found.</div></div></td></tr>
+                }
+                @foreach (var a in paged)
+                {
+                    <tr>
+                        <td class="text-muted text-sm">@a.Id</td>
+                        <td><strong>@a.PetName</strong></td>
+                        <td>@a.CustomerName</td>
+                        <td>@a.ServiceTypeName</td>
+                        <td>@a.AppointmentDate.ToString("MMM d, yyyy HH:mm")</td>
+                        <td><span class="badge @StatusBadge(a.Status)">@a.Status</span></td>
+                        <td>
+                            <div class="td-actions">
+                                <button class="btn btn-sm btn-secondary" @onclick="() => OpenModal(a)">Edit</button>
+                                <button class="btn btn-sm btn-danger" @onclick="() => AskDelete(a)">Delete</button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="card-body">
+        <div class="pagination">
+            <span class="pagination-info">Showing @((page-1)*pageSize+1)–@Math.Min(page*pageSize,filtered.Count) of @filtered.Count</span>
+            <button class="page-btn" disabled="@(page<=1)" @onclick="() => SetPage(page-1)">‹</button>
+            @for (int p = 1; p <= totalPages; p++)
+            {
+                var cp = p;
+                <button class="page-btn @(cp==page?"active":"")" @onclick="() => SetPage(cp)">@cp</button>
+            }
+            <button class="page-btn" disabled="@(page>=totalPages)" @onclick="() => SetPage(page+1)">›</button>
+        </div>
+    </div>
+</div>
+
+@if (showModal)
+{
+    <div class="modal-overlay" @onclick="CloseModal">
+        <div class="modal modal-lg" @onclick:stopPropagation>
+            <div class="modal-header">
+                <span>@(editing.Id == 0 ? "New Appointment" : "Edit Appointment")</span>
+                <button class="modal-close" @onclick="CloseModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Patient *</label>
+                        <select class="form-control" @bind="editing.PetId" @bind:after="OnPetChanged">
+                            <option value="0">-- Select Patient --</option>
+                            @foreach (var p in pets)
+                            {
+                                <option value="@p.Id">@p.Name (@p.SpeciesName)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Customer *</label>
+                        <select class="form-control" @bind="editing.CustomerId" @bind:after="OnCustomerChanged">
+                            <option value="0">-- Select Customer --</option>
+                            @foreach (var c in customers)
+                            {
+                                <option value="@c.Id">@c.FullName</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Service Type</label>
+                        <select class="form-control" @bind="editing.ServiceTypeId" @bind:after="OnServiceChanged">
+                            <option value="">-- None --</option>
+                            @foreach (var s in services)
+                            {
+                                <option value="@s.Id">@s.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Veterinarian</label>
+                        <select class="form-control" @bind="editing.AssignedVetId">
+                            <option value="">-- None --</option>
+                            @foreach (var v in vets)
+                            {
+                                <option value="@v.Id">@v.FullName</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Date & Time *</label>
+                        <input class="form-control" type="datetime-local"
+                               value="@editing.AppointmentDate.ToString("yyyy-MM-ddTHH:mm")"
+                               @onchange="e => editing.AppointmentDate = DateTime.Parse(e.Value!.ToString()!)" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Duration (min)</label>
+                        <input class="form-control" type="number" @bind="editing.Duration" min="5" />
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Status</label>
+                        <select class="form-control" @bind="editing.Status">
+                            <option>Scheduled</option>
+                            <option>In Progress</option>
+                            <option>Completed</option>
+                            <option>Cancelled</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Notes</label>
+                    <textarea class="form-control" rows="3" @bind="editing.Notes"></textarea>
+                </div>
+                @if (!string.IsNullOrEmpty(formError))
+                {
+                    <div class="login-error">⚠️ @formError</div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                <button class="btn btn-primary" @onclick="Save">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+<ConfirmModal Visible="showConfirm" Title="Delete Appointment"
+    Message="@($"Delete appointment for {deleteTarget?.PetName}? This cannot be undone.")"
+    OnConfirm="ConfirmDelete" OnCancel="() => showConfirm = false" />
+
+@code {
+    List<Appointment> all = [], filtered = [], paged = [];
+    List<Pet> pets = [];
+    List<Customer> customers = [];
+    List<User> vets = [];
+    List<ServiceType> services = [];
+
+    string search = "", filterStatus = "";
+    int page = 1, pageSize = 20, totalPages = 1;
+    bool showModal, showConfirm;
+    string formError = "";
+    Appointment editing = new();
+    Appointment? deleteTarget;
+
+    protected override void OnInitialized()
+    {
+        pets = PetSvc.GetAll();
+        customers = CustomerSvc.GetAll();
+        vets = UserSvc.GetAll().Where(u => u.IsActive).ToList();
+        services = ServiceSvc.GetAll();
+        Load();
+    }
+
+    void Load()
+    {
+        all = Svc.GetAll();
+        Filter();
+    }
+
+    void Filter()
+    {
+        filtered = all.Where(a =>
+            (string.IsNullOrEmpty(search) ||
+             a.PetName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+             a.CustomerName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+             a.ServiceTypeName.Contains(search, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrEmpty(filterStatus) || a.Status == filterStatus)
+        ).ToList();
+        totalPages = Math.Max(1, (int)Math.Ceiling(filtered.Count / (double)pageSize));
+        page = 1;
+        Paginate();
+    }
+
+    void Paginate() => paged = filtered.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+    void SetPage(int p) { page = p; Paginate(); }
+
+    void OpenModal(Appointment? a)
+    {
+        formError = "";
+        editing = a == null ? new Appointment { AppointmentDate = DateTime.Now.AddHours(1), Duration = 30, Status = "Scheduled" }
+                            : new Appointment
+                            {
+                                Id = a.Id, PetId = a.PetId, PetName = a.PetName,
+                                CustomerId = a.CustomerId, CustomerName = a.CustomerName,
+                                AssignedVetId = a.AssignedVetId, VetName = a.VetName,
+                                ServiceTypeId = a.ServiceTypeId, ServiceTypeName = a.ServiceTypeName,
+                                AppointmentDate = a.AppointmentDate, Duration = a.Duration,
+                                Status = a.Status, Notes = a.Notes
+                            };
+        showModal = true;
+    }
+
+    void CloseModal() { showModal = false; formError = ""; }
+
+    void OnPetChanged()
+    {
+        var p = pets.FirstOrDefault(x => x.Id == editing.PetId);
+        editing.PetName = p?.Name ?? "";
+    }
+    void OnCustomerChanged()
+    {
+        var c = customers.FirstOrDefault(x => x.Id == editing.CustomerId);
+        editing.CustomerName = c?.FullName ?? "";
+    }
+    void OnServiceChanged()
+    {
+        var s = services.FirstOrDefault(x => x.Id == editing.ServiceTypeId);
+        editing.ServiceTypeName = s?.Name ?? "";
+    }
+
+    void Save()
+    {
+        formError = "";
+        if (editing.PetId == 0) { formError = "Patient is required."; return; }
+        if (editing.CustomerId == 0) { formError = "Customer is required."; return; }
+
+        var vet = vets.FirstOrDefault(v => v.Id == editing.AssignedVetId);
+        editing.VetName = vet?.FullName ?? "";
+
+        try
+        {
+            if (editing.Id == 0) Svc.Insert(editing);
+            else Svc.Update(editing);
+            Toast.Success(editing.Id == 0 ? "Appointment created." : "Appointment updated.");
+            CloseModal();
+            Load();
+        }
+        catch (Exception ex) { formError = ex.Message; }
+    }
+
+    void AskDelete(Appointment a) { deleteTarget = a; showConfirm = true; }
+
+    void ConfirmDelete()
+    {
+        if (deleteTarget == null) return;
+        try
+        {
+            Svc.Delete(deleteTarget);
+            Toast.Success("Appointment deleted.");
+            showConfirm = false;
+            Load();
+        }
+        catch (Exception ex) { Toast.Error(ex.Message); showConfirm = false; }
+    }
+
+    string StatusBadge(string status) => status switch
+    {
+        "Scheduled" => "badge-info",
+        "In Progress" => "badge-warning",
+        "Completed" => "badge-success",
+        "Cancelled" => "badge-danger",
+        _ => "badge-gray"
+    };
+}

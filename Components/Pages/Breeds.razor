@@ -1,0 +1,129 @@
+@page "/breeds"
+@inject AppStateService AppState
+@inject IBreedService Svc
+@inject ISpeciesService SpeciesSvc
+@inject ToastService Toast
+
+@{AppState.PageTitle = "Breeds";}
+
+<div class="page-header">
+    <div><div class="page-title">Breeds</div></div>
+    <button class="btn btn-primary" @onclick="() => OpenModal(null)">+ New Breed</button>
+</div>
+
+<div class="card">
+    <div class="card-body" style="padding-bottom:8px">
+        <div class="toolbar">
+            <div class="search-box"><span class="search-icon">🔍</span><input placeholder="Search..." @bind="search" @bind:event="oninput" @oninput="Filter" /></div>
+            <select class="form-control" style="width:150px" @bind="filterSpecies" @bind:after="Filter">
+                <option value="0">All Species</option>
+                @foreach (var s in species) { <option value="@s.Id">@s.Name</option> }
+            </select>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>#</th><th>Name</th><th>Species</th><th>Description</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+                @if (filtered.Count == 0)
+                { <tr><td colspan="6"><div class="empty-state"><div class="empty-icon">🐕</div><div class="empty-msg">No breeds found.</div></div></td></tr> }
+                @foreach (var b in filtered)
+                {
+                    <tr>
+                        <td class="text-muted text-sm">@b.Id</td>
+                        <td><strong>@b.Name</strong></td>
+                        <td>@b.SpeciesName</td>
+                        <td>@b.Description</td>
+                        <td><span class="badge @(b.IsActive?"badge-success":"badge-gray")">@(b.IsActive?"Active":"Inactive")</span></td>
+                        <td><div class="td-actions">
+                            <button class="btn btn-sm btn-secondary" @onclick="() => OpenModal(b)">Edit</button>
+                            <button class="btn btn-sm btn-danger" @onclick="() => AskDelete(b)">Delete</button>
+                        </div></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (showModal)
+{
+    <div class="modal-overlay" @onclick="CloseModal">
+        <div class="modal" @onclick:stopPropagation>
+            <div class="modal-header"><span>@(editing.Id==0?"New Breed":"Edit Breed")</span><button class="modal-close" @onclick="CloseModal">✕</button></div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Species *</label>
+                    <select class="form-control" @bind="editing.SpeciesId" @bind:after="OnSpeciesChanged">
+                        <option value="0">-- Select Species --</option>
+                        @foreach (var s in species) { <option value="@s.Id">@s.Name</option> }
+                    </select>
+                </div>
+                <div class="form-group"><label class="form-label">Name *</label><input class="form-control" @bind="editing.Name" /></div>
+                <div class="form-group"><label class="form-label">Description</label><textarea class="form-control" rows="2" @bind="editing.Description"></textarea></div>
+                <div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" @bind="editing.IsActive" /> Active</label></div>
+                @if (!string.IsNullOrEmpty(formError)) { <div class="login-error">⚠️ @formError</div> }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                <button class="btn btn-primary" @onclick="Save">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+<ConfirmModal Visible="showConfirm" Title="Delete Breed" Message="@($"Delete {deleteTarget?.Name}?")"
+    OnConfirm="ConfirmDelete" OnCancel="() => showConfirm = false" />
+
+@code {
+    List<Breed> all = [], filtered = [];
+    List<AnimalSpecies> species = [];
+    string search = "", formError = "";
+    int filterSpecies = 0;
+    bool showModal, showConfirm;
+    Breed editing = new();
+    Breed? deleteTarget;
+
+    protected override void OnInitialized() { species = SpeciesSvc.GetAll(); Load(); }
+    void Load() { all = Svc.GetAll(); Filter(); }
+    void Filter() => filtered = all.Where(b =>
+        (string.IsNullOrEmpty(search) || b.Name.Contains(search, StringComparison.OrdinalIgnoreCase)) &&
+        (filterSpecies == 0 || b.SpeciesId == filterSpecies)).ToList();
+
+    void OnSpeciesChanged()
+    {
+        var s = species.FirstOrDefault(x => x.Id == editing.SpeciesId);
+        editing.SpeciesName = s?.Name ?? "";
+    }
+
+    void OpenModal(Breed? b)
+    {
+        formError = "";
+        editing = b == null ? new Breed { IsActive = true } :
+                  new Breed { Id=b.Id, SpeciesId=b.SpeciesId, SpeciesName=b.SpeciesName, Name=b.Name, Description=b.Description, IsActive=b.IsActive };
+        showModal = true;
+    }
+    void CloseModal() { showModal = false; formError = ""; }
+
+    void Save()
+    {
+        formError = "";
+        if (editing.SpeciesId == 0) { formError = "Species is required."; return; }
+        if (string.IsNullOrWhiteSpace(editing.Name)) { formError = "Name is required."; return; }
+        editing.Description ??= "";
+        try
+        {
+            if (editing.Id == 0) Svc.Insert(editing); else Svc.Update(editing);
+            Toast.Success("Saved."); CloseModal(); Load();
+        }
+        catch (Exception ex) { formError = ex.Message; }
+    }
+
+    void AskDelete(Breed b) { deleteTarget = b; showConfirm = true; }
+    void ConfirmDelete()
+    {
+        if (deleteTarget == null) return;
+        try { Svc.Delete(deleteTarget); Toast.Success("Deleted."); showConfirm = false; Load(); }
+        catch (Exception ex) { Toast.Error(ex.Message); showConfirm = false; }
+    }
+}

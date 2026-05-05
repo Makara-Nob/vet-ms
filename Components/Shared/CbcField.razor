@@ -1,0 +1,12 @@
+<div class="form-group">
+    <label class="form-label">@Label</label>
+    <input class="form-control" type="number" step="0.01"
+           value="@Value"
+           @onchange="e => ValueChanged.InvokeAsync(decimal.TryParse(e.Value?.ToString(), out var v) ? v : 0)" />
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public decimal Value { get; set; }
+    [Parameter] public EventCallback<decimal> ValueChanged { get; set; }
+}

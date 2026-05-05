@@ -1,0 +1,231 @@
+@page "/cbc"
+@inject AppStateService AppState
+@inject ICbcService Svc
+@inject IPetService PetSvc
+@inject ICustomerService CustomerSvc
+@inject ToastService Toast
+
+@{AppState.PageTitle = "CBC Records";}
+
+<div class="page-header">
+    <div>
+        <div class="page-title">CBC Records</div>
+        <div class="page-subtitle">@filtered.Count record(s)</div>
+    </div>
+    <button class="btn btn-primary" @onclick="() => OpenModal(null)">+ New CBC</button>
+</div>
+
+<div class="card">
+    <div class="card-body" style="padding-bottom:8px">
+        <div class="toolbar">
+            <div class="search-box">
+                <span class="search-icon">🔍</span>
+                <input placeholder="Search patient, owner..." @bind="search" @bind:event="oninput" @oninput="Filter" />
+            </div>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>#</th><th>Patient</th><th>Owner</th><th>Test Date</th><th>RBC</th><th>Hgb</th><th>WBC</th><th>Plt</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+                @if (paged.Count == 0)
+                {
+                    <tr><td colspan="9"><div class="empty-state"><div class="empty-icon">🧪</div><div class="empty-msg">No CBC records found.</div></div></td></tr>
+                }
+                @foreach (var r in paged)
+                {
+                    <tr>
+                        <td class="text-muted text-sm">@r.Id</td>
+                        <td><strong>@r.PetName</strong></td>
+                        <td>@r.CustomerName</td>
+                        <td>@r.TestDate.ToString("MMM d, yyyy")</td>
+                        <td>@r.Rbc</td>
+                        <td>@r.Hgb</td>
+                        <td>@r.Wbc</td>
+                        <td>@r.Plt</td>
+                        <td>
+                            <div class="td-actions">
+                                <button class="btn btn-sm btn-secondary" @onclick="() => OpenModal(r)">Edit</button>
+                                <button class="btn btn-sm btn-success" @onclick="() => ExportPdf(r)">PDF</button>
+                                <button class="btn btn-sm btn-danger" @onclick="() => AskDelete(r)">Delete</button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="card-body">
+        <div class="pagination">
+            <span class="pagination-info">Showing @((page-1)*pageSize+1)–@Math.Min(page*pageSize,filtered.Count) of @filtered.Count</span>
+            <button class="page-btn" disabled="@(page<=1)" @onclick="() => SetPage(page-1)">‹</button>
+            @for (int p = 1; p <= totalPages; p++) { var cp=p; <button class="page-btn @(cp==page?"active":"")" @onclick="() => SetPage(cp)">@cp</button> }
+            <button class="page-btn" disabled="@(page>=totalPages)" @onclick="() => SetPage(page+1)">›</button>
+        </div>
+    </div>
+</div>
+
+@if (showModal)
+{
+    <div class="modal-overlay" @onclick="CloseModal">
+        <div class="modal modal-lg" @onclick:stopPropagation>
+            <div class="modal-header">
+                <span>@(editing.Id == 0 ? "New CBC Record" : "Edit CBC Record")</span>
+                <button class="modal-close" @onclick="CloseModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Patient *</label>
+                        <select class="form-control" @bind="editing.PetId" @bind:after="OnPetChanged">
+                            <option value="0">-- Select Patient --</option>
+                            @foreach (var p in pets) { <option value="@p.Id">@p.Name</option> }
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Owner</label>
+                        <select class="form-control" @bind="editing.CustomerId" @bind:after="OnOwnerChanged">
+                            <option value="0">-- Select Owner --</option>
+                            @foreach (var c in customers) { <option value="@c.Id">@c.FullName</option> }
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Test Date *</label>
+                    <input class="form-control" type="date"
+                           value="@editing.TestDate.ToString("yyyy-MM-dd")"
+                           @onchange="e => editing.TestDate = DateTime.Parse(e.Value!.ToString()!)" />
+                </div>
+
+                <div style="font-weight:600;margin:12px 0 8px">Erythrogram</div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">RBC</label><input class="form-control" type="number" step="0.01" @bind="editing.Rbc" /></div>
+                    <div class="form-group"><label class="form-label">Hgb</label><input class="form-control" type="number" step="0.01" @bind="editing.Hgb" /></div>
+                    <div class="form-group"><label class="form-label">Hct</label><input class="form-control" type="number" step="0.01" @bind="editing.Hct" /></div>
+                    <div class="form-group"><label class="form-label">MCV</label><input class="form-control" type="number" step="0.01" @bind="editing.Mcv" /></div>
+                    <div class="form-group"><label class="form-label">MCH</label><input class="form-control" type="number" step="0.01" @bind="editing.Mch" /></div>
+                    <div class="form-group"><label class="form-label">MCHC</label><input class="form-control" type="number" step="0.01" @bind="editing.Mchc" /></div>
+                    <div class="form-group"><label class="form-label">PLT</label><input class="form-control" type="number" step="0.01" @bind="editing.Plt" /></div>
+                </div>
+
+                <div style="font-weight:600;margin:12px 0 8px">Leukogram</div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">WBC</label><input class="form-control" type="number" step="0.01" @bind="editing.Wbc" /></div>
+                    <div class="form-group"><label class="form-label">NEU</label><input class="form-control" type="number" step="0.01" @bind="editing.Neu" /></div>
+                    <div class="form-group"><label class="form-label">LYM</label><input class="form-control" type="number" step="0.01" @bind="editing.Lym" /></div>
+                    <div class="form-group"><label class="form-label">MON</label><input class="form-control" type="number" step="0.01" @bind="editing.Mon" /></div>
+                    <div class="form-group"><label class="form-label">EOS</label><input class="form-control" type="number" step="0.01" @bind="editing.Eos" /></div>
+                    <div class="form-group"><label class="form-label">BAS</label><input class="form-control" type="number" step="0.01" @bind="editing.Bas" /></div>
+                </div>
+
+                <div style="font-weight:600;margin:12px 0 8px">Biochemistry (optional)</div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">ALT</label><input class="form-control" type="number" step="0.01" @bind="editing.Alt" /></div>
+                    <div class="form-group"><label class="form-label">AST</label><input class="form-control" type="number" step="0.01" @bind="editing.Ast" /></div>
+                    <div class="form-group"><label class="form-label">Creatinine</label><input class="form-control" type="number" step="0.01" @bind="editing.Creatinine" /></div>
+                    <div class="form-group"><label class="form-label">Urea</label><input class="form-control" type="number" step="0.01" @bind="editing.Urea" /></div>
+                    <div class="form-group"><label class="form-label">BUN</label><input class="form-control" type="number" step="0.01" @bind="editing.Bun" /></div>
+                </div>
+
+                <div class="form-group" style="margin-top:8px">
+                    <label class="form-label">Remarks</label>
+                    <textarea class="form-control" rows="2" @bind="editing.Remarks"></textarea>
+                </div>
+
+                @if (!string.IsNullOrEmpty(formError))
+                { <div class="login-error">⚠️ @formError</div> }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                <button class="btn btn-primary" @onclick="Save">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+<ConfirmModal Visible="showConfirm" Title="Delete CBC Record"
+    Message="@($"Delete CBC record for {deleteTarget?.PetName}? This cannot be undone.")"
+    OnConfirm="ConfirmDelete" OnCancel="() => showConfirm = false" />
+
+@code {
+    List<CbcRecord> all = [], filtered = [], paged = [];
+    List<Pet> pets = [];
+    List<Customer> customers = [];
+    string search = "";
+    int page = 1, pageSize = 10, totalPages = 1;
+    bool showModal, showConfirm;
+    string formError = "";
+    CbcRecord editing = new();
+    CbcRecord? deleteTarget;
+
+    protected override void OnInitialized()
+    {
+        pets = PetSvc.GetAll();
+        customers = CustomerSvc.GetAll();
+        Load();
+    }
+
+    void Load() { all = Svc.GetAll(); Filter(); }
+
+    void Filter()
+    {
+        filtered = all.Where(r =>
+            string.IsNullOrEmpty(search) ||
+            r.PetName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+            r.CustomerName.Contains(search, StringComparison.OrdinalIgnoreCase)
+        ).ToList();
+        totalPages = Math.Max(1, (int)Math.Ceiling(filtered.Count / (double)pageSize));
+        page = 1; Paginate();
+    }
+
+    void Paginate() => paged = filtered.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+    void SetPage(int p) { page = p; Paginate(); }
+
+    void OpenModal(CbcRecord? r)
+    {
+        formError = "";
+        editing = r == null ? new CbcRecord { TestDate = DateTime.Today }
+                            : new CbcRecord
+                            {
+                                Id=r.Id, PetId=r.PetId, PetName=r.PetName, CustomerId=r.CustomerId, CustomerName=r.CustomerName,
+                                TestDate=r.TestDate, Rbc=r.Rbc, Hgb=r.Hgb, Hct=r.Hct, Mcv=r.Mcv, Mch=r.Mch, Mchc=r.Mchc,
+                                Plt=r.Plt, Wbc=r.Wbc, Neu=r.Neu, Lym=r.Lym, Mon=r.Mon, Eos=r.Eos, Bas=r.Bas,
+                                Alt=r.Alt, Ast=r.Ast, Creatinine=r.Creatinine, Urea=r.Urea, Bun=r.Bun, Remarks=r.Remarks
+                            };
+        showModal = true;
+    }
+    void CloseModal() { showModal = false; formError = ""; }
+
+    void OnPetChanged() { var p = pets.FirstOrDefault(x => x.Id == editing.PetId); editing.PetName = p?.Name ?? ""; }
+    void OnOwnerChanged() { var c = customers.FirstOrDefault(x => x.Id == editing.CustomerId); editing.CustomerName = c?.FullName ?? ""; }
+
+    void Save()
+    {
+        formError = "";
+        if (editing.PetId == 0) { formError = "Patient is required."; return; }
+        editing.Remarks ??= "";
+        try
+        {
+            if (editing.Id == 0) Svc.Insert(editing); else Svc.Update(editing);
+            Toast.Success(editing.Id == 0 ? "CBC record created." : "CBC record updated.");
+            CloseModal(); Load();
+        }
+        catch (Exception ex) { formError = ex.Message; }
+    }
+
+    void ExportPdf(CbcRecord r)
+    {
+        try { VetMS.Helpers.CbcPdfExporter.ShowExportDialog(r); }
+        catch (Exception ex) { Toast.Error(ex.Message); }
+    }
+
+    void AskDelete(CbcRecord r) { deleteTarget = r; showConfirm = true; }
+    void ConfirmDelete()
+    {
+        if (deleteTarget == null) return;
+        try { Svc.Delete(deleteTarget); Toast.Success("CBC record deleted."); showConfirm = false; Load(); }
+        catch (Exception ex) { Toast.Error(ex.Message); showConfirm = false; }
+    }
+}
